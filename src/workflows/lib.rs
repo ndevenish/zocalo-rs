@@ -9,8 +9,10 @@ use serde::{Deserialize, Serialize};
 // }
 
 #[derive(Serialize, Deserialize, Debug)]
+// #[serde(deny_unknown_fields)]
 pub struct Node {
     queue: String,
+    service: String,
 }
 
 #[serde_with::serde_as]
@@ -38,8 +40,25 @@ impl Recipe {
     pub fn merge(_other: &Recipe) -> Recipe {
         unimplemented!();
     }
-    pub fn validate(&self) -> bool {
-        true
+    pub fn validate(&self) -> Result<(), String> {
+        // 1. Start node: Implicit, impossible to break.
+
+        // 2. Empty start node. Could happen while mutating or creating.
+        if self.start.is_empty() {
+            return Err(String::from("No start node specified"));
+        }
+
+        // 2. All start nodes are tuples with length 2. Impossible to break.
+        // 3. Start node points to itself - Impossible to break.
+        // 4. Error nodes only point to numeric nodes - Impossible to break.
+        // 5. All other nodes are numeric - Impossible to break.
+
+        // 6. Detect cycles in "start" node
+        // 7. Detect cycles in "end" node
+
+        // 8. Make sure there are no unreferenced nodes
+
+        Ok(())
     }
 }
 
@@ -54,6 +73,8 @@ pub struct RecipeWrapper {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::from_str;
+
     const RECIPE_A_JSON: &str = r#"{
         "1": {
             "service": "A service",
@@ -90,13 +111,18 @@ mod tests {
     #[test]
     fn parse_recipe_a() {
         let recipe_a: Recipe = serde_json::from_str(RECIPE_A_JSON).unwrap();
-        assert!(recipe_a.validate());
+        assert!(recipe_a.validate().is_ok());
         println!("{:?}", recipe_a);
     }
     #[test]
     fn parse_recipe_b() {
         let recipe_b: Recipe = serde_json::from_str(RECIPE_B_JSON).unwrap();
-        assert!(recipe_b.validate());
+        assert!(recipe_b.validate().is_ok());
         println!("{:?}", recipe_b);
+    }
+    #[test]
+    fn test_validation_errors() {
+        assert!(from_str::<Recipe>(r#""#).is_err());
+        // from_str::<Recipe>(r#"{}"#).unwrap();
     }
 }
