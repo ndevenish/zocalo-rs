@@ -13,13 +13,17 @@ pub struct Node {
     queue: String,
 }
 
+#[serde_with::serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Recipe {
     /// Recipe steps
+    #[serde(flatten)]
+    #[serde_as(as = "HashMap<serde_with::DisplayFromStr, _>")]
     nodes: HashMap<i32, Node>,
     /// The list of all nodes to start the graph processing, with optional initial parameters.
-    start: HashMap<i32, Option<serde_json::Value>>,
+    start: Vec<(i32, Option<serde_json::Value>)>,
     /// Nodes to trigger when an error happens
+    #[serde(default)]
     error: Vec<i32>,
 }
 
@@ -27,12 +31,15 @@ impl Recipe {
     pub fn new() -> Recipe {
         Recipe {
             nodes: HashMap::new(),
-            start: HashMap::new(),
+            start: Vec::new(),
             error: Vec::new(),
         }
     }
     pub fn merge(_other: &Recipe) -> Recipe {
         unimplemented!();
+    }
+    pub fn validate(&self) -> bool {
+        true
     }
 }
 
@@ -43,10 +50,6 @@ impl Default for Recipe {
 }
 
 pub struct RecipeWrapper {}
-
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
 
 #[cfg(test)]
 mod tests {
@@ -66,6 +69,19 @@ mod tests {
         "error": [2]
     }"#;
 
+    const RECIPE_B_JSON: &str = r#"{
+        "1": {
+            "service": "A service",
+            "queue": "some.queue.{first}",
+            "output": 2
+        },
+        "2": {
+            "service": "C service",
+            "queue": "third.queue"
+        },
+        "start": [[1, {}]]
+    }"#;
+
     #[test]
     fn empty_recipe() {
         let _recipe = Recipe::new();
@@ -73,6 +89,14 @@ mod tests {
 
     #[test]
     fn parse_recipe_a() {
-        let _recipe: Recipe = serde_json::from_str(RECIPE_A_JSON).unwrap();
+        let recipe_a: Recipe = serde_json::from_str(RECIPE_A_JSON).unwrap();
+        assert!(recipe_a.validate());
+        println!("{:?}", recipe_a);
+    }
+    #[test]
+    fn parse_recipe_b() {
+        let recipe_b: Recipe = serde_json::from_str(RECIPE_B_JSON).unwrap();
+        assert!(recipe_b.validate());
+        println!("{:?}", recipe_b);
     }
 }
