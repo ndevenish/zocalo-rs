@@ -47,6 +47,12 @@ enum NodeVertex {
     Node(NodeID),
 }
 
+impl From<NodeID> for NodeVertex {
+    fn from(value: NodeID) -> Self {
+        NodeVertex::Node(value)
+    }
+}
+
 impl Display for NodeVertex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -59,15 +65,16 @@ impl Display for NodeVertex {
 
 /// Generate a list of reachable nodes from a particular recipe vertex
 ///
-/// Will generate an error if the graph is not a DAG (has cycles)
+/// # Errors
+/// - A references node is missing
+/// - The node graph is not a DAG, because it has cycles
 fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet<NodeID>, String> {
-    let mut all_nodes = HashSet::new();
+    let mut visited_nodes = HashSet::new();
     let mut current_path = vec![start];
 
-    // let mut current_node = start;
-    loop {
+    'outer: while !current_path.is_empty() {
         let current_node = *current_path.last().unwrap();
-        all_nodes.insert(current_node.to_owned());
+        visited_nodes.insert(current_node.to_owned());
 
         // Get a list of all nodes going out from this one
         let outgoing_nodes: HashSet<i32> = match current_node {
@@ -79,8 +86,8 @@ fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet
                 .ok_or(format!("Referenced node {id} is missing from recipe"))?
                 .all_outgoing(),
         };
-        // If any of these nodes are in our current path, then we've detected a cycle
-        let current_path_set: HashSet<NodeVertex> = current_path.into_iter().collect();
+        // If any of these outgoing nodes are in our current path, then we've detected a cycle
+        let current_path_set: HashSet<NodeVertex> = current_path.iter().cloned().collect();
         let cycle_nodes = outgoing_nodes
             .iter()
             .map(|x| NodeVertex::Node(*x))
@@ -94,11 +101,20 @@ fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet
                 cycle_nodes.first().unwrap()
             ))?;
         }
-
-        break;
+        // Loop through all outgoing nodes that are not in the "all_nodex"
+        for node in outgoing_nodes {
+            // If we have not visited this node, then push and search it
+            if !visited_nodes.contains(&NodeVertex::Node(node)) {
+                current_path.push(NodeVertex::Node(node));
+                continue 'outer;
+            }
+        }
+        // If here, then none of the outgoing nodes are unvisited. pop it.
+        current_path.pop();
     }
+
     // Extract the numeric nodes only to return
-    Ok(all_nodes
+    Ok(visited_nodes
         .iter()
         .filter_map(|&x| match x {
             NodeVertex::Node(id) => Some(id),
@@ -202,5 +218,31 @@ mod tests {
     fn test_validation_errors() {
         assert!(from_str::<Recipe>(r#""#).is_err());
         // from_str::<Recipe>(r#"{}"#).unwrap();
+    }
+    #[test]
+    fn test_reachable_dag_nodes() {
+        let recipe = Recipe {
+            nodes: HashMap::from([
+                (
+                    1,
+                    Node {
+                        queue: String::from("some_queue"),
+                        service: String::from("Some Service"),
+                    },
+                ),
+                (
+                    2,
+                    Node {
+                        queue: String::new(),
+                        service: String::new(),
+                    },
+                ),
+            ]),
+            start: vec![(1, None)],
+            error: vec![1],
+        };
+
+        assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Start).is_ok());
+        assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
     }
 }
