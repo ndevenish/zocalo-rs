@@ -304,7 +304,9 @@ impl Recipe {
         unimplemented!();
     }
     pub fn validate(&self) -> Result<(), String> {
-        // 1. Start node: Implicit, impossible to break.
+        // Numbered checks from python implementation;
+
+        // 1. Start node exists: Implicit, impossible to break.
 
         // 2. Empty start node. Could happen while mutating or creating.
         if self.start.is_empty() {
@@ -317,10 +319,30 @@ impl Recipe {
         // 5. All other nodes are numeric - Impossible to break.
 
         // 6. Detect cycles in "start" node
+        let start_accessible = all_reachable_dag_nodes(self, NodeVertex::Start)?;
         // 7. Detect cycles in "end" node
+        let error_accessible = all_reachable_dag_nodes(self, NodeVertex::Error)?;
 
         // 8. Make sure there are no unreferenced nodes
-
+        let keys: HashSet<NodeID> = self.nodes.keys().cloned().collect();
+        let all_referenced_nodes: HashSet<NodeID> = start_accessible
+            .iter()
+            .chain(&error_accessible)
+            .cloned()
+            .collect();
+        // If these don't match, give an error saying what the issue is
+        if keys != all_referenced_nodes {
+            if keys.is_subset(&all_referenced_nodes) {
+                let missing_nodes = all_referenced_nodes.difference(&keys);
+                return Err(format!(
+                    "There are references to missing nodes: {missing_nodes:?}"
+                ));
+            }
+            if keys.is_superset(&all_referenced_nodes) {
+                let unreferenced = keys.difference(&all_referenced_nodes);
+                return Err(format!("There are unreferenced nodes: {unreferenced:?}"));
+            }
+        }
         Ok(())
     }
 }
