@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    num::ParseIntError,
 };
 
 use serde::Deserialize;
@@ -60,18 +61,63 @@ impl TryInto<NodeID> for &IntermediateNodeID {
     }
 }
 
+impl IntermediateNodeID {
+    fn into_nodeid(&self) -> Result<NodeID, std::num::ParseIntError> {
+        Ok(match self {
+            IntermediateNodeID::Int(v) => *v,
+            IntermediateNodeID::String(s) => s.parse()?,
+        })
+    }
+}
+
+#[derive(Debug)]
+enum NodeOutputError {
+    ParseIntError(ParseIntError),
+    RecursiveMapError,
+}
+
+impl From<std::num::ParseIntError> for NodeOutputError {
+    fn from(value: std::num::ParseIntError) -> Self {
+        NodeOutputError::ParseIntError(value)
+    }
+}
+impl Display for NodeOutputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ParseIntError(e) => write!(f, "{e}"),
+            Self::RecursiveMapError => write!(f, "Recursive output maps are not supported"),
+        }
+    }
+}
+
 impl TryFrom<IntermediateNodeOutput> for NodeOutput {
-    type Error = std::num::ParseIntError;
+    type Error = NodeOutputError;
+    // std::num::ParseIntError;
 
     fn try_from(value: IntermediateNodeOutput) -> Result<Self, Self::Error> {
         Ok(match value {
-            IntermediateNodeOutput::Single(v) => NodeOutput::Direct(vec![(&v).try_into()?]),
+            IntermediateNodeOutput::Single(x) => NodeOutput::Direct(vec![x.into_nodeid()?]),
             IntermediateNodeOutput::Direct(v) => NodeOutput::Direct(
                 v.iter()
                     .map(|f| f.try_into())
                     .collect::<Result<Vec<NodeID>, std::num::ParseIntError>>()?,
             ),
-            IntermediateNodeOutput::Mapped(m) => NodeOutput::Lookup(HashMap::new()),
+            IntermediateNodeOutput::Mapped(m) => {
+                let a = m
+                    .iter()
+                    .cloned()
+                    .map(|(k, v)| match NodeOutput::try_from(v)? {
+                        NodeOutput::Direct(x) => Ok(NodeOutput::Direct(x)),
+                        NodeOutput::Lookup(_) => Err(NodeOutputError::RecursiveMapError),
+                    });
+                //     let out_v = match v {
+                //         IntermediateNodeOutput::Single(x) => vec![x.try_into()?],
+                //         IntermediateNodeOutput::Direct(x) =>
+                //     }
+                // }));
+
+                NodeOutput::Lookup(HashMap::new())
+            }
         })
     }
 }
