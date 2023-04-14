@@ -3,31 +3,109 @@ use std::{
     fmt::Display,
 };
 
-use serde::{Deserialize, Serialize};
-
-// enum RecipeOutput {
-//     Integer(i64),
-//     Multiple(Vec<i64>),
-//     Lookup(HashMap<String, i64>),
-// }
+use serde::Deserialize;
 
 type NodeID = i32;
 
-#[derive(Serialize, Deserialize, Debug)]
+/// Enum for intermediate parsing of NodeID. In the recipe, this can be
+/// represented as both a numeric string, and an integer. Using this
+/// intermediate format lets us just rely on serde default parsing, and
+/// we can implement the conversion TryFrom to sort it out.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum IntermediateNodeID {
+    Int(NodeID),
+    String(String),
+}
+
+/// Similarly to IntermediateNodeID, we separate the cases here for
+/// parsing out of the raw file, then convert to our internal
+/// representation which removes some of the ambiguity (e.g. a single
+/// output is represented as a vec with one item)
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum IntermediateNodeOutput {
+    Single(IntermediateNodeID),
+    Direct(Vec<IntermediateNodeID>),
+    Mapped(HashMap<String, IntermediateNodeOutput>),
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(try_from = "IntermediateNodeOutput")]
+enum NodeOutput {
+    Direct(Vec<NodeID>),
+    Lookup(HashMap<String, Vec<NodeID>>),
+}
+
+impl NodeOutput {
+    fn new() -> Self {
+        NodeOutput::Direct(Vec::new())
+    }
+}
+
+impl Default for NodeOutput {
+    fn default() -> Self {
+        NodeOutput::new()
+    }
+}
+
+impl TryInto<NodeID> for &IntermediateNodeID {
+    type Error = std::num::ParseIntError;
+
+    fn try_into(self) -> Result<NodeID, Self::Error> {
+        Ok(match self {
+            IntermediateNodeID::Int(v) => *v,
+            IntermediateNodeID::String(s) => s.parse()?,
+        })
+    }
+}
+
+impl TryFrom<IntermediateNodeOutput> for NodeOutput {
+    type Error = std::num::ParseIntError;
+
+    fn try_from(value: IntermediateNodeOutput) -> Result<Self, Self::Error> {
+        Ok(match value {
+            IntermediateNodeOutput::Single(v) => NodeOutput::Direct(vec![(&v).try_into()?]),
+            IntermediateNodeOutput::Direct(v) => NodeOutput::Direct(
+                v.iter()
+                    .map(|f| f.try_into())
+                    .collect::<Result<Vec<NodeID>, std::num::ParseIntError>>()?,
+            ),
+            IntermediateNodeOutput::Mapped(m) => NodeOutput::Lookup(HashMap::new()),
+        })
+    }
+}
+
+#[derive(Deserialize, Debug)]
 // #[serde(deny_unknown_fields)]
 pub struct Node {
     queue: String,
     service: String,
+    #[serde(default)]
+    output: NodeOutput,
+    // error: Option<NodeOutput>,
 }
-
+impl Default for Node {
+    fn default() -> Self {
+        Node::new()
+    }
+}
 impl Node {
+    pub fn new() -> Self {
+        Node {
+            queue: String::new(),
+            service: String::new(),
+            output: NodeOutput::Direct(Vec::new()),
+            // error: None,
+        }
+    }
     pub fn all_outgoing(&self) -> HashSet<NodeID> {
         HashSet::new()
     }
 }
 
 #[serde_with::serde_as]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct Recipe {
     /// Recipe steps
     #[serde(flatten)]
@@ -219,30 +297,63 @@ mod tests {
         assert!(from_str::<Recipe>(r#""#).is_err());
         // from_str::<Recipe>(r#"{}"#).unwrap();
     }
+
+    #[test]
+    fn test_mapped_outputs() {
+        let recipe: Recipe = serde_json::from_str(
+            r#"
+        {
+            "1": {
+                "service": "Test outputs",
+                "queue": "some",
+                "output": {
+                    "one": 2,
+                    "all": 3
+                }
+            },
+            "2": {"service": "service 2", "queue": "service_2"},
+            "3": {"service": "service 3", "queue": "service_3"},
+            "start": [[1, {}]]
+        }"#,
+        )
+        .unwrap();
+        println!("{recipe:#?}");
+
+        // let a = recipe.nodes[1];
+
+        assert!(matches!(
+            &recipe.nodes.get(&1).unwrap().output,
+            NodeOutput::Lookup(_x)
+        ));
+
+        let output = match &recipe.nodes.get(&1).unwrap().output {
+            NodeOutput::Lookup(m) => m,
+            _ => panic!("Unknown node type"),
+        };
+        let expected = HashMap::from([
+            ("one".to_owned(), vec![2 as NodeID]),
+            ("all".to_owned(), vec![3 as NodeID]),
+        ]);
+        assert!(expected.len() == output.len());
+        //  && expected.keys().all(|k| output.contains_key(k)));
+        for k in expected.keys() {
+            assert!(output.contains_key(k));
+        }
+        // Does this just work?
+        assert!(&expected == output);
+    }
+
     #[test]
     fn test_reachable_dag_nodes() {
         let recipe = Recipe {
-            nodes: HashMap::from([
-                (
-                    1,
-                    Node {
-                        queue: String::from("some_queue"),
-                        service: String::from("Some Service"),
-                    },
-                ),
-                (
-                    2,
-                    Node {
-                        queue: String::new(),
-                        service: String::new(),
-                    },
-                ),
-            ]),
+            nodes: HashMap::from([(1, Node::new()), (2, Node::new()), (3, Node::new())]),
             start: vec![(1, None)],
             error: vec![1],
         };
 
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Start).is_ok());
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
+
+        // Check that we pick up a node pointing to itself
     }
 }
