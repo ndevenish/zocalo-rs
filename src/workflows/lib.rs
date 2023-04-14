@@ -1,17 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    num::ParseIntError,
 };
 
-use serde::Deserialize;
+use serde::{de::Visitor, Deserialize};
 
-type NodeID = i32;
+type NodeID = i64;
 
 /// Enum for intermediate parsing of NodeID. In the recipe, this can be
 /// represented as both a numeric string, and an integer. Using this
-/// intermediate format lets us just rely on serde default parsing, and
-/// we can implement the conversion TryFrom to sort it out.
+/// intermediate format lets us just rely on serde default parsing.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum IntermediateNodeID {
@@ -19,106 +17,126 @@ enum IntermediateNodeID {
     String(String),
 }
 
-/// Similarly to IntermediateNodeID, we separate the cases here for
-/// parsing out of the raw file, then convert to our internal
-/// representation which removes some of the ambiguity (e.g. a single
-/// output is represented as a vec with one item)
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum IntermediateNodeOutput {
-    Single(IntermediateNodeID),
-    Direct(Vec<IntermediateNodeID>),
-    Mapped(HashMap<String, IntermediateNodeOutput>),
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(try_from = "IntermediateNodeOutput")]
-enum NodeOutput {
+/// Represents a set of outputs for a node in a recipe.
+///
+/// There are three kinds:
+/// - `None`: This recipe node doesn't lead anywhere else
+/// - `Direct`: This recipe node has a direct list of onward nodes
+/// - `Lookup`: This recipe has multiple possible onward nodes, depending
+///             upon the behaviour of the actual service.
+#[derive(Debug)]
+pub enum NodeOutput {
+    None,
     Direct(Vec<NodeID>),
     Lookup(HashMap<String, Vec<NodeID>>),
 }
 
 impl NodeOutput {
     fn new() -> Self {
-        NodeOutput::Direct(Vec::new())
+        NodeOutput::None
     }
 }
-
 impl Default for NodeOutput {
     fn default() -> Self {
         NodeOutput::new()
     }
 }
 
-impl TryInto<NodeID> for &IntermediateNodeID {
-    type Error = std::num::ParseIntError;
+struct NodeOutputVisitor;
 
-    fn try_into(self) -> Result<NodeID, Self::Error> {
-        Ok(match self {
-            IntermediateNodeID::Int(v) => *v,
-            IntermediateNodeID::String(s) => s.parse()?,
-        })
+impl<'de> Visitor<'de> for NodeOutputVisitor {
+    type Value = NodeOutput;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter
+            .write_str("Node ID (int or string), sequence of Node ID, or map from name to node ID")
     }
-}
 
-impl IntermediateNodeID {
-    fn into_nodeid(&self) -> Result<NodeID, std::num::ParseIntError> {
-        Ok(match self {
-            IntermediateNodeID::Int(v) => *v,
-            IntermediateNodeID::String(s) => s.parse()?,
-        })
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(NodeOutput::Direct(vec![v]))
     }
-}
 
-#[derive(Debug)]
-enum NodeOutputError {
-    ParseIntError(ParseIntError),
-    RecursiveMapError,
-}
-
-impl From<std::num::ParseIntError> for NodeOutputError {
-    fn from(value: std::num::ParseIntError) -> Self {
-        NodeOutputError::ParseIntError(value)
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(NodeOutput::Direct(vec![v
+            .try_into()
+            .map_err(|e| E::custom(e))?]))
     }
-}
-impl Display for NodeOutputError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ParseIntError(e) => write!(f, "{e}"),
-            Self::RecursiveMapError => write!(f, "Recursive output maps are not supported"),
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(NodeOutput::Direct(vec![v
+            .parse()
+            .map_err(|e| E::custom(e))?]))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        let mut output = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+
+        while let Some(elem) = seq.next_element()? {
+            output.push(match elem {
+                IntermediateNodeID::Int(e) => e,
+                IntermediateNodeID::String(s) => s.parse().map_err(serde::de::Error::custom)?,
+            })
+        }
+        // If we are an empty direct node, just class this as "None"
+        if output.is_empty() {
+            Ok(NodeOutput::None)
+        } else {
+            Ok(NodeOutput::Direct(output))
+        }
+    }
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::MapAccess<'de>,
+    {
+        let mut output = HashMap::with_capacity(map.size_hint().unwrap_or(0));
+        while let Some((key, value)) = map.next_entry()? {
+            // let key = match value {
+            //     NodeOutput::Direct(x) =>
+            // }
+            output.insert(
+                key,
+                match value {
+                    NodeOutput::Direct(x) => x,
+                    NodeOutput::Lookup(_) => {
+                        return Err(serde::de::Error::custom(
+                            "Do not support recursive output maps",
+                        ))
+                    }
+                    NodeOutput::None => {
+                        return Err(serde::de::Error::custom(
+                            "Do not understand receiving None output in an output map",
+                        ))
+                    }
+                },
+            );
+        }
+        // If we had no entries, return None instead of an empty Lookup map.
+        if output.is_empty() {
+            Ok(NodeOutput::None)
+        } else {
+            Ok(NodeOutput::Lookup(output))
         }
     }
 }
 
-impl TryFrom<IntermediateNodeOutput> for NodeOutput {
-    type Error = NodeOutputError;
-    // std::num::ParseIntError;
-
-    fn try_from(value: IntermediateNodeOutput) -> Result<Self, Self::Error> {
-        Ok(match value {
-            IntermediateNodeOutput::Single(x) => NodeOutput::Direct(vec![x.into_nodeid()?]),
-            IntermediateNodeOutput::Direct(v) => NodeOutput::Direct(
-                v.iter()
-                    .map(|f| f.try_into())
-                    .collect::<Result<Vec<NodeID>, std::num::ParseIntError>>()?,
-            ),
-            IntermediateNodeOutput::Mapped(m) => {
-                let a = m
-                    .iter()
-                    .cloned()
-                    .map(|(k, v)| match NodeOutput::try_from(v)? {
-                        NodeOutput::Direct(x) => Ok(NodeOutput::Direct(x)),
-                        NodeOutput::Lookup(_) => Err(NodeOutputError::RecursiveMapError),
-                    });
-                //     let out_v = match v {
-                //         IntermediateNodeOutput::Single(x) => vec![x.try_into()?],
-                //         IntermediateNodeOutput::Direct(x) =>
-                //     }
-                // }));
-
-                NodeOutput::Lookup(HashMap::new())
-            }
-        })
+impl<'de> Deserialize<'de> for NodeOutput {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(NodeOutputVisitor {})
     }
 }
 
@@ -129,7 +147,8 @@ pub struct Node {
     service: String,
     #[serde(default)]
     output: NodeOutput,
-    // error: Option<NodeOutput>,
+    #[serde(default)]
+    error: NodeOutput,
 }
 impl Default for Node {
     fn default() -> Self {
@@ -142,7 +161,7 @@ impl Node {
             queue: String::new(),
             service: String::new(),
             output: NodeOutput::Direct(Vec::new()),
-            // error: None,
+            error: NodeOutput::Direct(Vec::new()), // error: None,
         }
     }
     pub fn all_outgoing(&self) -> HashSet<NodeID> {
@@ -201,7 +220,7 @@ fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet
         visited_nodes.insert(current_node.to_owned());
 
         // Get a list of all nodes going out from this one
-        let outgoing_nodes: HashSet<i32> = match current_node {
+        let outgoing_nodes: HashSet<NodeID> = match current_node {
             NodeVertex::Start => recipe.start.iter().map(|x| x.0).collect(),
             NodeVertex::Error => recipe.error.iter().copied().collect(),
             NodeVertex::Node(id) => recipe
@@ -347,8 +366,7 @@ mod tests {
     #[test]
     fn test_mapped_outputs() {
         let recipe: Recipe = serde_json::from_str(
-            r#"
-        {
+            r#"{
             "1": {
                 "service": "Test outputs",
                 "queue": "some",
@@ -365,8 +383,6 @@ mod tests {
         .unwrap();
         println!("{recipe:#?}");
 
-        // let a = recipe.nodes[1];
-
         assert!(matches!(
             &recipe.nodes.get(&1).unwrap().output,
             NodeOutput::Lookup(_x)
@@ -380,11 +396,7 @@ mod tests {
             ("one".to_owned(), vec![2 as NodeID]),
             ("all".to_owned(), vec![3 as NodeID]),
         ]);
-        assert!(expected.len() == output.len());
-        //  && expected.keys().all(|k| output.contains_key(k)));
-        for k in expected.keys() {
-            assert!(output.contains_key(k));
-        }
+
         // Does this just work?
         assert!(&expected == output);
     }
