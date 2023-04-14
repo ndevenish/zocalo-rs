@@ -35,6 +35,14 @@ impl NodeOutput {
     fn new() -> Self {
         NodeOutput::None
     }
+    /// A set of all possible nodes from this output set
+    fn all_nodes(&self) -> HashSet<NodeID> {
+        match self {
+            NodeOutput::Direct(v) => v.iter().cloned().collect(),
+            NodeOutput::Lookup(m) => m.values().into_iter().flatten().cloned().collect(),
+            NodeOutput::None => HashSet::new(),
+        }
+    }
 }
 impl Default for NodeOutput {
     fn default() -> Self {
@@ -167,14 +175,17 @@ impl Node {
         Node {
             queue: String::new(),
             service: None,
-            output: NodeOutput::Direct(Vec::new()),
-            error: NodeOutput::Direct(Vec::new()), // error: None,
+            output: NodeOutput::None,
+            error: NodeOutput::None, // error: None,
         }
     }
     /// Generate a list of every possible declared destination node from
     /// this one. This covers both "output" and "error" fields.
     pub fn all_outgoing(&self) -> HashSet<NodeID> {
-        unimplemented!("Need mapping first");
+        let mut output = HashSet::new();
+        output.extend(self.output.all_nodes());
+        output.extend(self.error.all_nodes());
+        output
     }
 }
 
@@ -224,7 +235,7 @@ impl Display for NodeVertex {
 /// Generate a list of reachable nodes from a particular recipe vertex
 ///
 /// # Errors
-/// - A references node is missing
+/// - A referenced node is missing
 /// - The node graph is not a DAG, because it has cycles
 fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet<NodeID>, String> {
     let mut visited_nodes = HashSet::new();
@@ -418,15 +429,35 @@ mod tests {
 
     #[test]
     fn test_reachable_dag_nodes() {
-        let recipe = Recipe {
-            nodes: HashMap::from([(1, Node::new()), (2, Node::new()), (3, Node::new())]),
-            start: vec![(1, None)],
-            error: vec![1],
-        };
+        let mut recipe = serde_json::from_str(
+            r#"{
+            "1": {
+                "queue": "some"
+            },
+            "2": {
+                "queue": "some_2",
+                "output": 3
+            },
+            "3": {
+                "queue": "some_3",
+                "output": 2
+            },
+            "start": [[1, {}]],
+            "error": [2]
+        }"#,
+        )
+        .unwrap();
 
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Start).is_ok());
+        // This has cycles, so should fail
+        assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
+
+        // Check reassigning this to an unknown node should still error
+        recipe.nodes.get_mut(&(3 as NodeID)).unwrap().output = NodeOutput::Direct(vec![4]);
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
 
         // Check that we pick up a node pointing to itself
+        recipe.nodes.get_mut(&(3 as NodeID)).unwrap().output = NodeOutput::Direct(vec![3]);
+        assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
     }
 }
