@@ -140,16 +140,23 @@ impl<'de> Deserialize<'de> for NodeOutput {
     }
 }
 
+/// A Recipe node. Describes the destination queue, connections and
+/// other data that the service instance will use to process the node.
 #[derive(Deserialize, Debug)]
 // #[serde(deny_unknown_fields)]
 pub struct Node {
-    queue: String,
-    service: String,
+    /// The message broken queue that this recipe will be posted to
+    pub queue: String,
+    /// The "Name" of the service that is responsible for this node
+    pub service: Option<String>,
+    /// Onward nodes, that messages from this node can be sent
     #[serde(default)]
-    output: NodeOutput,
+    pub output: NodeOutput,
+    /// Nodes that will be triggered if a (node-service-defined) error occurs
     #[serde(default)]
-    error: NodeOutput,
+    pub error: NodeOutput,
 }
+
 impl Default for Node {
     fn default() -> Self {
         Node::new()
@@ -159,28 +166,36 @@ impl Node {
     pub fn new() -> Self {
         Node {
             queue: String::new(),
-            service: String::new(),
+            service: None,
             output: NodeOutput::Direct(Vec::new()),
             error: NodeOutput::Direct(Vec::new()), // error: None,
         }
     }
+    /// Generate a list of every possible declared destination node from
+    /// this one. This covers both "output" and "error" fields.
     pub fn all_outgoing(&self) -> HashSet<NodeID> {
-        HashSet::new()
+        unimplemented!("Need mapping first");
     }
 }
 
+/// A self-contained description of a workflow.
+///
+///
 #[serde_with::serde_as]
 #[derive(Deserialize, Debug)]
 pub struct Recipe {
-    /// Recipe steps
+    /// Node steps of the recipe. Each node describes a single, modelled "step"
+    /// of the recipe, that is sent the recipe state, and can read the recipe
+    /// in order to decide where to dispatch the next step of the workflow.
     #[serde(flatten)]
     #[serde_as(as = "HashMap<serde_with::DisplayFromStr, _>")]
-    nodes: HashMap<NodeID, Node>,
-    /// The list of all nodes to start the graph processing, with optional initial parameters.
-    start: Vec<(NodeID, Option<serde_json::Value>)>,
-    /// Nodes to trigger when an error happens
+    pub nodes: HashMap<NodeID, Node>,
+    /// Which nodes to start the workflow from, with the initial
+    /// associated payload state that will sent with the recipe wrapper
+    pub start: Vec<(NodeID, Option<serde_json::Value>)>,
+    /// If an error occurs during processing, which nodes should be triggered?
     #[serde(default)]
-    error: Vec<NodeID>,
+    pub error: Vec<NodeID>,
 }
 
 #[derive(PartialEq, Hash, Eq, Copy, Clone)]
