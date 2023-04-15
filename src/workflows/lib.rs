@@ -324,6 +324,7 @@ impl Recipe {
             error: Vec::new(),
         }
     }
+
     pub fn merge(_other: &Recipe) -> Recipe {
         unimplemented!();
     }
@@ -376,7 +377,6 @@ pub struct RecipeWrapper {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::from_str;
 
     const RECIPE_A_JSON: &str = r#"{
         "1": {
@@ -427,12 +427,61 @@ mod tests {
     fn test_validation_errors() {
         // Possible validation failures:
         // 2. Empty start node. Could happen while mutating or creating.
+        assert!(matches!(
+            serde_json::from_str::<Recipe>(r#"{"start":[]}"#)
+                .unwrap()
+                .validate()
+                .unwrap_err(),
+            RecipeError::NoStartNode
+        ));
         // 6. Detect cycles in "start" node
-        // 7. Detect cycles in "end" node
+        assert!(matches!(
+            serde_json::from_str::<Recipe>(r#"{"start": [[1, []]], "1": {"output": 2, "queue": "q1"}, "2": {"output": 1, "queue": "q2"}}"#).unwrap().validate().unwrap_err(),
+            RecipeError::RecipeHasCycles(_, _)
+        ));
+        // 7. Detect cycles in "error" node
+        assert!(matches!(
+            serde_json::from_str::<Recipe>(
+                r#"{
+                "start": [[3, []]],
+                "error": [1],
+                "1": {"output": 2, "queue": "q1"},
+                "2": {"output": 1, "queue": "q2"},
+                "3": {"queue": "q3"}
+            }"#
+            )
+            .unwrap()
+            .validate()
+            .unwrap_err(),
+            RecipeError::RecipeHasCycles(_, _)
+        ));
         // 8. Make sure there are no unreferenced nodes
-
-        assert!(from_str::<Recipe>(r#""#).is_err());
-        // from_str::<Recipe>(r#"{}"#).unwrap();
+        assert!(matches!(
+            serde_json::from_str::<Recipe>(
+                r#"{
+                "start": [[1, []]],
+                "1": {"queue": "q1"},
+                "2": {"queue": "q2"}
+            }"#
+            )
+            .unwrap()
+            .validate()
+            .unwrap_err(),
+            RecipeError::UnreferencedNode(2)
+        ));
+        // And that there are no missing referenced nodes
+        assert!(matches!(
+            serde_json::from_str::<Recipe>(
+                r#"{
+            "start": [[1, []]],
+            "1": {"queue": "q1", "output": 2}
+        }"#
+            )
+            .unwrap()
+            .validate()
+            .unwrap_err(),
+            RecipeError::MissingNode(2)
+        ));
     }
 
     #[test]
