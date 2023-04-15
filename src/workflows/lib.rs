@@ -518,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mapped_outputs() {
+    fn test_parsing_mapped_outputs() {
         let recipe: Recipe = from_str(
             r#"{
             "1": {
