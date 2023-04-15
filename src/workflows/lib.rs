@@ -377,6 +377,7 @@ pub struct RecipeWrapper {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::from_str;
 
     const RECIPE_A_JSON: &str = r#"{
         "1": {
@@ -413,13 +414,13 @@ mod tests {
 
     #[test]
     fn parse_recipe_a() {
-        let recipe_a: Recipe = serde_json::from_str(RECIPE_A_JSON).unwrap();
+        let recipe_a: Recipe = from_str(RECIPE_A_JSON).unwrap();
         assert!(recipe_a.validate().is_ok());
         println!("{:?}", recipe_a);
     }
     #[test]
     fn parse_recipe_b() {
-        let recipe_b: Recipe = serde_json::from_str(RECIPE_B_JSON).unwrap();
+        let recipe_b: Recipe = from_str(RECIPE_B_JSON).unwrap();
         assert!(recipe_b.validate().is_ok());
         println!("{:?}", recipe_b);
     }
@@ -428,7 +429,7 @@ mod tests {
         // Possible validation failures:
         // 2. Empty start node. Could happen while mutating or creating.
         assert!(matches!(
-            serde_json::from_str::<Recipe>(r#"{"start":[]}"#)
+            from_str::<Recipe>(r#"{"start":[]}"#)
                 .unwrap()
                 .validate()
                 .unwrap_err(),
@@ -436,12 +437,12 @@ mod tests {
         ));
         // 6. Detect cycles in "start" node
         assert!(matches!(
-            serde_json::from_str::<Recipe>(r#"{"start": [[1, []]], "1": {"output": 2, "queue": "q1"}, "2": {"output": 1, "queue": "q2"}}"#).unwrap().validate().unwrap_err(),
+            from_str::<Recipe>(r#"{"start": [[1, []]], "1": {"output": 2, "queue": "q1"}, "2": {"output": 1, "queue": "q2"}}"#).unwrap().validate().unwrap_err(),
             RecipeError::RecipeHasCycles(_, _)
         ));
         // 7. Detect cycles in "error" node
         assert!(matches!(
-            serde_json::from_str::<Recipe>(
+            from_str::<Recipe>(
                 r#"{
                 "start": [[3, []]],
                 "error": [1],
@@ -457,7 +458,7 @@ mod tests {
         ));
         // 8. Make sure there are no unreferenced nodes
         assert!(matches!(
-            serde_json::from_str::<Recipe>(
+            from_str::<Recipe>(
                 r#"{
                 "start": [[1, []]],
                 "1": {"queue": "q1"},
@@ -471,7 +472,7 @@ mod tests {
         ));
         // And that there are no missing referenced nodes
         assert!(matches!(
-            serde_json::from_str::<Recipe>(
+            from_str::<Recipe>(
                 r#"{
             "start": [[1, []]],
             "1": {"queue": "q1", "output": 2}
@@ -485,8 +486,40 @@ mod tests {
     }
 
     #[test]
+    fn test_impossible_deserialization_fails() {
+        // Test cases that are explicitly validated by the python implementation,
+        // but should be impossible to deserialize here
+
+        // Node without a queue
+        assert!(from_str::<Recipe>(r#"{"start": [[1, []]], "1": {}}"#).is_err());
+
+        // Missing Start node
+        assert!(from_str::<Recipe>(r#"{"1": {"queue": "some"}}"#).is_err());
+
+        // All start nodes are tuples with length 2
+        assert!(from_str::<Recipe>(r#"{"start": 1, "1": {"queue": "some"}}"#).is_err());
+        assert!(from_str::<Recipe>(r#"{"start": [1], "1": {"queue": "some"}}"#).is_err());
+        assert!(from_str::<Recipe>(r#"{"start": [[1]], "1": {"queue": "some"}}"#).is_err());
+        assert!(from_str::<Recipe>(r#"{"start": [[1, [], 1]], "1": {"queue": "some"}}"#).is_err());
+
+        // Start node points to itself
+        assert!(from_str::<Recipe>(r#"{"start": [["start", []]}"#).is_err());
+
+        // Error nodes only point to numeric nodes
+        assert!(from_str::<Recipe>(
+            r#"{"start": [[1, []], "end": ["start"], "1": {"queue": "q"}}"#
+        )
+        .is_err());
+        // Other nodes are non-numeric
+        assert!(from_str::<Recipe>(
+            r#"{"start": [[1, []], "1": {"queue": "some"}, "another": {"queue": "q2"}}"#
+        )
+        .is_err());
+    }
+
+    #[test]
     fn test_mapped_outputs() {
-        let recipe: Recipe = serde_json::from_str(
+        let recipe: Recipe = from_str(
             r#"{
             "1": {
                 "service": "Test outputs",
@@ -524,7 +557,7 @@ mod tests {
 
     #[test]
     fn test_reachable_dag_nodes() {
-        let mut recipe = serde_json::from_str(
+        let mut recipe = from_str(
             r#"{
             "1": {
                 "queue": "some"
