@@ -4,6 +4,7 @@ use std::{
 };
 
 use serde::{de::Visitor, Deserialize};
+use thiserror::Error;
 
 type NodeID = i64;
 
@@ -110,9 +111,6 @@ impl<'de> Visitor<'de> for NodeOutputVisitor {
     {
         let mut output = HashMap::with_capacity(map.size_hint().unwrap_or(0));
         while let Some((key, value)) = map.next_entry()? {
-            // let key = match value {
-            //     NodeOutput::Direct(x) =>
-            // }
             output.insert(
                 key,
                 match value {
@@ -232,12 +230,27 @@ impl Display for NodeVertex {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum RecipeError {
+    #[error("A referenced node ({0}) is missing from the recipe")]
+    MissingNode(NodeID),
+    #[error("A node ({0}) exists but is not referenced")]
+    UnreferencedNode(NodeID),
+    #[error("The recipe has node reference-cycles, caused by link from {0} ↦ {1}")]
+    RecipeHasCycles(NodeID, NodeID),
+    #[error("No start node has been specified")]
+    NoStartNode,
+}
+
 /// Generate a list of reachable nodes from a particular recipe vertex
 ///
 /// # Errors
 /// - A referenced node is missing
 /// - The node graph is not a DAG, because it has cycles
-fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet<NodeID>, String> {
+fn all_reachable_dag_nodes(
+    recipe: &Recipe,
+    start: NodeVertex,
+) -> Result<HashSet<NodeID>, RecipeError> {
     let mut visited_nodes = HashSet::new();
     let mut current_path = vec![start];
 
@@ -252,7 +265,7 @@ fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet
             NodeVertex::Node(id) => recipe
                 .nodes
                 .get(&id)
-                .ok_or(format!("Referenced node {id} is missing from recipe"))?
+                .ok_or(RecipeError::MissingNode(id))?
                 .all_outgoing(),
         };
         // If any of these outgoing nodes are in our current path, then we've detected a cycle
@@ -265,10 +278,21 @@ fn all_reachable_dag_nodes(recipe: &Recipe, start: NodeVertex) -> Result<HashSet
             .cloned()
             .collect::<Vec<NodeVertex>>();
         if !cycle_nodes.is_empty() {
-            Err(format!(
-                "Cycle in DAG detected from node {current_node} → {}",
-                cycle_nodes.first().unwrap()
-            ))?;
+            let current_node_id = match current_node {
+                NodeVertex::Node(x) => Ok(x),
+                _ => Err(()),
+            }
+            .unwrap();
+            let target_node_id = match cycle_nodes.first().unwrap() {
+                NodeVertex::Node(x) => Ok(*x),
+                _ => Err(()),
+            }
+            .unwrap();
+
+            return Err(RecipeError::RecipeHasCycles(
+                current_node_id,
+                target_node_id,
+            ));
         }
         // Loop through all outgoing nodes that are not in the "all_nodex"
         for node in outgoing_nodes {
@@ -303,14 +327,14 @@ impl Recipe {
     pub fn merge(_other: &Recipe) -> Recipe {
         unimplemented!();
     }
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), RecipeError> {
         // Numbered checks from python implementation;
 
         // 1. Start node exists: Implicit, impossible to break.
 
         // 2. Empty start node. Could happen while mutating or creating.
         if self.start.is_empty() {
-            return Err(String::from("No start node specified"));
+            return Err(RecipeError::NoStartNode);
         }
 
         // 2. All start nodes are tuples with length 2. Impossible to break.
@@ -330,18 +354,12 @@ impl Recipe {
             .chain(&error_accessible)
             .cloned()
             .collect();
-        // If these don't match, give an error saying what the issue is
-        if keys != all_referenced_nodes {
-            if keys.is_subset(&all_referenced_nodes) {
-                let missing_nodes = all_referenced_nodes.difference(&keys);
-                return Err(format!(
-                    "There are references to missing nodes: {missing_nodes:?}"
-                ));
-            }
-            if keys.is_superset(&all_referenced_nodes) {
-                let unreferenced = keys.difference(&all_referenced_nodes);
-                return Err(format!("There are unreferenced nodes: {unreferenced:?}"));
-            }
+        // The case where a node is referenced in the DAG but not present is
+        // handled by the all_reachable_dag_nodes check. Thus, we only need
+        // to check here for unreferenced ndoes
+        if keys != all_referenced_nodes && keys.is_superset(&all_referenced_nodes) {
+            let mut unreferenced = keys.difference(&all_referenced_nodes);
+            return Err(RecipeError::UnreferencedNode(*unreferenced.next().unwrap()));
         }
         Ok(())
     }
@@ -407,6 +425,12 @@ mod tests {
     }
     #[test]
     fn test_validation_errors() {
+        // Possible validation failures:
+        // 2. Empty start node. Could happen while mutating or creating.
+        // 6. Detect cycles in "start" node
+        // 7. Detect cycles in "end" node
+        // 8. Make sure there are no unreferenced nodes
+
         assert!(from_str::<Recipe>(r#""#).is_err());
         // from_str::<Recipe>(r#"{}"#).unwrap();
     }
