@@ -3,7 +3,7 @@ use std::{
     fmt::Display,
 };
 
-use serde::{de::Visitor, Deserialize};
+use serde::{de::Visitor, Deserialize, Serialize};
 use thiserror::Error;
 
 type NodeID = i64;
@@ -42,6 +42,13 @@ impl NodeOutput {
             NodeOutput::Direct(v) => v.iter().cloned().collect(),
             NodeOutput::Lookup(m) => m.values().into_iter().flatten().cloned().collect(),
             NodeOutput::None => HashSet::new(),
+        }
+    }
+    fn is_empty(&self) -> bool {
+        match self {
+            NodeOutput::None => true,
+            NodeOutput::Direct(v) => v.is_empty(),
+            NodeOutput::Lookup(m) => m.is_empty(),
         }
     }
 }
@@ -146,9 +153,28 @@ impl<'de> Deserialize<'de> for NodeOutput {
     }
 }
 
+impl Serialize for NodeOutput {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            NodeOutput::None => panic!("Should never try to serialize an empty NodeOutput"),
+            NodeOutput::Direct(v) => {
+                if v.len() == 1 {
+                    serializer.serialize_i64(*v.first().unwrap())
+                } else {
+                    serializer.collect_seq(v.iter())
+                }
+            }
+            NodeOutput::Lookup(m) => serializer.collect_map(m.iter()),
+        }
+    }
+}
+
 /// A Recipe node. Describes the destination queue, connections and
 /// other data that the service instance will use to process the node.
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 // #[serde(deny_unknown_fields)]
 pub struct Node {
     /// The message broken queue that this recipe will be posted to
@@ -157,9 +183,11 @@ pub struct Node {
     pub service: Option<String>,
     /// Onward nodes, that messages from this node can be sent
     #[serde(default)]
+    #[serde(skip_serializing_if = "NodeOutput::is_empty")]
     pub output: NodeOutput,
     /// Nodes that will be triggered if a (node-service-defined) error occurs
     #[serde(default)]
+    #[serde(skip_serializing_if = "NodeOutput::is_empty")]
     pub error: NodeOutput,
 }
 
@@ -191,7 +219,7 @@ impl Node {
 ///
 ///
 #[serde_with::serde_as]
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Recipe {
     /// Node steps of the recipe. Each node describes a single, modelled "step"
     /// of the recipe, that is sent the recipe state, and can read the recipe
@@ -204,6 +232,7 @@ pub struct Recipe {
     pub start: Vec<(NodeID, Option<serde_json::Value>)>,
     /// If an error occurs during processing, which nodes should be triggered?
     #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub error: Vec<NodeID>,
 }
 
@@ -587,5 +616,16 @@ mod tests {
         // Check that we pick up a node pointing to itself
         recipe.nodes.get_mut(&(3 as NodeID)).unwrap().output = NodeOutput::Direct(vec![3]);
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
+    }
+
+    #[test]
+    fn test_serialize() {
+        let recipe_a: Recipe = from_str(RECIPE_A_JSON).unwrap();
+        let reserial = serde_json::to_string(&recipe_a).unwrap();
+        println!("Recipe In: {RECIPE_A_JSON}\nParsed: {recipe_a:#?}\nSerialized: {reserial}");
+
+        let recipe_b: Recipe = from_str(RECIPE_B_JSON).unwrap();
+        let reserial = serde_json::to_string(&recipe_b).unwrap();
+        println!("Recipe In: {RECIPE_B_JSON}\nParsed: {recipe_b:#?}\nSerialized: {reserial}");
     }
 }
