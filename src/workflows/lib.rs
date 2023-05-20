@@ -628,4 +628,260 @@ mod tests {
         let reserial = serde_json::to_string(&recipe_b).unwrap();
         println!("Recipe In: {RECIPE_B_JSON}\nParsed: {recipe_b:#?}\nSerialized: {reserial}");
     }
+
+    #[test]
+    fn test_complex_ispyb_autoprocessing_xia2_dials_eiger_cluster() {
+        let s = r#"{
+            "1": [
+              "Recipe for processing data collections with xia2 and the DIALS pipeline.",
+              "This registers an AutoProcProgram with ISPyB and passes the AutoProcProgramId",
+              "to downstream services via a RecipeWrapper environment variable.",
+              "Then xia2 is run on the  on STFC/IRIS cloud with the dials pipeline taking",
+              "processing parameters and sweep selection into account."
+            ],
+            "1": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "multipart_message",
+                                   "dcid": "{ispyb_dcid}",
+                                   "ispyb_command_list": [
+                                     { "ispyb_command": "register_processing",
+                                       "program": "xia2 dials",
+                                       "cmdline": "XIA2 DIALS (ap-zoc)",
+                                       "environment": "{$REPLACE:ispyb_reprocessing_parameters}",
+                                       "rpid": "{ispyb_process}",
+                                       "store_result": "ispyb_autoprocprogram_id"
+                                     },
+                                     { "ispyb_command": "upsert_integration",
+                                       "program_id": "$ispyb_autoprocprogram_id",
+                                       "store_result": "ispyb_integration_id"
+                                     }
+                                   ]
+                                 },
+                   "output": [2,13]
+                 },
+            "2": { "service": "DLS cluster submission",
+                   "queue": "cluster.submission",
+                   "parameters": { "cluster": "{ispyb_preferred_datacentre}",
+                                   "cluster_project": "{ispyb_beamline}",
+                                   "cluster_queue": "high",
+                                   "cluster_submission_parameters": "-N zoc-xia2-dials-setup -l h_rt=1:00:00",
+                                   "cluster_commands": [
+          "module load dials",
+          "echo dlstbx.wrap -t PikaTransport --wrap xia2_setup --recipewrapper \"$RECIPEWRAP\" >runinfo",
+          "dlstbx.wrap -t PikaTransport --wrap xia2_setup --recipewrapper \"$RECIPEWRAP\""
+                                   ],
+                                   "recipewrapper": "{ispyb_working_directory}/.recipewrap",
+                                   "workingdir": "{ispyb_working_directory}/.launch"
+                                 },
+                   "wrapper": { "task_information": "{ispyb_beamline}" },
+                   "job_parameters": {
+                     "ispyb_parameters": "{$REPLACE:ispyb_reprocessing_parameters}",
+                     "timeout": null,
+                     "working_directory": "{ispyb_working_directory}",
+                     "create_symlink": "xia2-dials"
+                   },
+                   "output": {
+                     "success": [3,14],
+                     "failure": 6
+                   }
+                 },
+            "3": { "service": "DLS cluster submission",
+                   "queue": "cluster.submission",
+                   "parameters": { "cluster": "{ispyb_preferred_datacentre}",
+                                   "cluster_project": "{ispyb_beamline}",
+                                   "cluster_queue": "default",
+                                   "cluster_submission_parameters": "-N zoc-xia2-dials -pe smp 16-20 -l mfree=4G -l h_rt=6:00:00",
+                                   "cluster_commands": [
+          "module load dials",
+          "echo dlstbx.wrap -t PikaTransport --wrap xia2_run --recipewrapper \"$RECIPEWRAP\" >runinfo",
+          "dlstbx.wrap -t PikaTransport --wrap xia2_run --recipewrapper \"$RECIPEWRAP\""
+                                   ],
+                                   "recipewrapper": "{ispyb_working_directory}/.recipewrap",
+                                   "workingdir": "{ispyb_working_directory}/.launch"
+                                 },
+                   "wrapper": { "task_information": "{ispyb_beamline}" },
+                   "job_parameters": {
+                     "xia2": { "images": "{ispyb_images}",
+                               "min_images": 3,
+                               "pipeline": "dials",
+                               "nproc": 20,
+                               "dynamic_shadowing": false,
+                               "read_all_image_headers": false,
+                               "anomalous": true,
+                               "project": "{ispyb_project}",
+                               "crystal": "{ispyb_crystal}",
+                               "trust_beam_centre": true
+                             },
+                     "working_directory": "{ispyb_working_directory}",
+                     "ispyb_parameters": "{$REPLACE:ispyb_reprocessing_parameters}",
+                     "timeout": null,
+                     "create_symlink": "xia2-dials"
+                   },
+              "output": {
+                "success": 4,
+                "failure": 4
+              }
+                },
+            "4": { "service": "DLS cluster submission",
+                   "queue": "cluster.submission",
+                   "parameters": { "cluster": "{ispyb_preferred_datacentre}",
+                                   "cluster_project": "{ispyb_beamline}",
+                                   "cluster_queue": "high",
+                                   "cluster_submission_parameters": "-N zoc-xia2-dials-results -l mfree=400M -l h_rt=1:00:00",
+                                   "cluster_commands": [
+          "module load dials",
+          "echo dlstbx.wrap -t PikaTransport --wrap xia2_results --recipewrapper \"$RECIPEWRAP\" >runinfo",
+          "dlstbx.wrap -t PikaTransport --wrap xia2_results --recipewrapper \"$RECIPEWRAP\""
+                                   ],
+                                   "recipewrapper": "{ispyb_working_directory}/.recipewrap",
+                                   "workingdir": "{ispyb_working_directory}/.launch"
+                                 },
+                   "wrapper": { "task_information": "{ispyb_beamline}" },
+                   "job_parameters": {
+                     "ispyb_parameters": "{$REPLACE:ispyb_reprocessing_parameters}",
+                     "timeout": null,
+                     "working_directory": "{ispyb_working_directory}/xia2-dials",
+                     "results_directory": "{ispyb_results_directory}/xia2-dials",
+                     "create_symlink": "xia2-dials",
+                     "store_xtriage_results": true,
+                     "pipeline": "dials",
+                     "dcid": "{ispyb_dcid}",
+                     "dc_end_time": "{ispyb_dc_info[endTime]}"
+                   },
+                   "output": {
+                     "success": 5,
+                     "failure": 6,
+                     "ispyb": 7,
+                     "result-individual-file": 8
+                   }
+                 },
+            "13": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "update_processing_status",
+                                   "program_id": "$ispyb_autoprocprogram_id",
+                                   "message": "starting" }
+                 },
+            "14": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "update_processing_status",
+                                   "program_id": "$ispyb_autoprocprogram_id",
+                                   "message": "processing" }
+                 },
+            "5": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "update_processing_status",
+                                   "program_id": "$ispyb_autoprocprogram_id",
+                                   "message": "processing successful",
+                                   "status": "success" }
+                 },
+            "6": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "update_processing_status",
+                                   "program_id": "$ispyb_autoprocprogram_id",
+                                   "message": "processing failure",
+                                   "status": "failure" }
+                 },
+            "7": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "multipart_message",
+                                   "dcid": "{ispyb_dcid}",
+                                   "integration_id": "$ispyb_integration_id",
+                                   "program_id": "$ispyb_autoprocprogram_id"
+                                 },
+                   "output": [9,10,12,16]
+                 },
+            "8": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "add_program_attachment",
+                                   "program_id": "$ispyb_autoprocprogram_id"
+                                 }
+                 },
+            "9": { "service": "DLS Trigger",
+                   "queue": "trigger",
+                   "parameters": { "target": "dimple",
+                                   "dcid": "{ispyb_dcid}",
+                                   "comment": "DIMPLE triggered by automatic xia2-dials",
+                                   "automatic": true,
+                                   "scaling_id": "$ispyb_autoprocscaling_id",
+                                   "pdb": "{$REPLACE:ispyb_pdb}",
+                                   "user_pdb_directory": "{ispyb_visit_directory}/processing/pdb",
+                                   "pdb_tmpdir": "{ispyb_visit_directory}/tmp/pdb",
+                                   "mtz": "{ispyb_results_directory}/xia2-dials/DataFiles/{ispyb_project}_{ispyb_crystal}_free.mtz"
+                                 }
+                 },
+            "10": { "service": "DLS ISPyB connector",
+                   "queue": "ispyb_connector",
+                   "parameters": { "ispyb_command": "retrieve_programs_for_job_id",
+                                   "rpid": "{ispyb_process}",
+                                   "store_result": "ispyb_programs_all"
+                                 },
+                   "output": 11
+                 },
+            "11": { "service": "DLS Trigger",
+                   "queue": "trigger",
+                   "parameters": { "target": "big_ep",
+                                   "dcid": "{ispyb_dcid}",
+                                   "comment": "big_ep triggered by automatic xia2-dials",
+                                   "automatic": true,
+                                   "program_id": "$ispyb_autoprocprogram_id",
+                                   "spacegroup": "{ispyb_space_group}",
+                                   "diffraction_plan_info": "{$REPLACE:ispyb_diffraction_plan}",
+                                   "xia2 dials": { "data": "{ispyb_results_directory}/xia2-dials/DataFiles/{ispyb_project}_{ispyb_crystal}_free.mtz",
+                                                   "scaled_unmerged_mtz": "{ispyb_results_directory}/xia2-dials/DataFiles/{ispyb_project}_{ispyb_crystal}_scaled_unmerged.mtz",
+                                                   "path_ext": "xia2/dials-run"
+                                                 }
+                                 }
+                 },
+            "12": { "service": "DLS Trigger",
+                   "queue": "trigger",
+                   "parameters": { "target": "multiplex",
+                                   "dcid": "{ispyb_dcid}",
+                                   "wavelength": "{ispyb_dc_info[wavelength]}",
+                                   "comment": "xia2.multiplex triggered by automatic xia2-dials",
+                                   "automatic": true,
+                                   "ispyb_parameters": "{$REPLACE:ispyb_reprocessing_parameters}",
+                                   "related_dcids": "{$REPLACE:ispyb_related_dcids}",
+                                   "diffraction_plan_info": "{$REPLACE:ispyb_diffraction_plan}",
+                                   "backoff-delay": 8,
+                                   "backoff-max-try": 10,
+                                   "backoff-multiplier": 2
+                                 }
+                 },
+            "16": { "service": "DLS Trigger",
+                  "queue": "trigger",
+                  "parameters": { "target": "mrbump",
+                                  "dcid": "{ispyb_dcid}",
+                                  "comment": "MrBUMP triggered by automatic xia2-dials",
+                                  "automatic": true,
+                                  "pdb": "{$REPLACE:ispyb_pdb}",
+                                  "user_pdb_directory": "{ispyb_visit_directory}/processing/pdb",
+                                  "pdb_tmpdir": "{ispyb_visit_directory}/tmp/pdb",
+                                  "protein_info": "{$REPLACE:ispyb_protein_info}",
+                                  "scaling_id": "$ispyb_autoprocscaling_id",
+                                  "hklin":  "{ispyb_results_directory}/xia2-dials/DataFiles/{ispyb_project}_{ispyb_crystal}_free.mtz"
+                                }
+                },
+            "start": [
+                [1, []]
+            ]
+          }"#;
+        let v: serde_json::Value = from_str(s).unwrap();
+        // Let's try this from value
+        let r: Recipe = serde_json::from_value(v).unwrap();
+        // let r: Recipe = from_str(s).unwrap();
+        println!("{r:#?}");
+    }
+
+    #[test]
+    fn test_redefine_key() {
+        let r = from_str::<Recipe>(
+            r#"{
+            "1": {"queue": "some_first"},
+            "1": {"queue": "some_second"},
+            "start": [[1, []]]
+        }"#,
+        )
+        .unwrap();
+        println!("{r:#?}");
+    }
 }
