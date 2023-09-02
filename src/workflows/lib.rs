@@ -1,12 +1,31 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    str::FromStr,
 };
 
 use serde::{de::Visitor, Deserialize, Serialize};
 use thiserror::Error;
 
-type NodeID = i64;
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NodeID(i64);
+
+impl From<i64> for NodeID {
+    fn from(value: i64) -> Self {
+        NodeID(value)
+    }
+}
+impl FromStr for NodeID {
+    type Err = <i64 as FromStr>::Err;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(NodeID(s.parse()?))
+    }
+}
+impl Display for NodeID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 /// Enum for intermediate parsing of NodeID. In the recipe, this can be
 /// represented as both a numeric string, and an integer. Using this
@@ -40,7 +59,7 @@ impl NodeOutput {
     fn all_nodes(&self) -> HashSet<NodeID> {
         match self {
             NodeOutput::Direct(v) => v.iter().cloned().collect(),
-            NodeOutput::Lookup(m) => m.values().into_iter().flatten().cloned().collect(),
+            NodeOutput::Lookup(m) => m.values().flatten().cloned().collect(),
             NodeOutput::None => HashSet::new(),
         }
     }
@@ -72,16 +91,16 @@ impl<'de> Visitor<'de> for NodeOutputVisitor {
     where
         E: serde::de::Error,
     {
-        Ok(NodeOutput::Direct(vec![v]))
+        Ok(NodeOutput::Direct(vec![NodeID(v)]))
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
-        Ok(NodeOutput::Direct(vec![v
-            .try_into()
-            .map_err(|e| E::custom(e))?]))
+        Ok(NodeOutput::Direct(vec![NodeID(
+            v.try_into().map_err(|e| E::custom(e))?,
+        )]))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -162,7 +181,7 @@ impl Serialize for NodeOutput {
             NodeOutput::None => panic!("Should never try to serialize an empty NodeOutput"),
             NodeOutput::Direct(v) => {
                 if v.len() == 1 {
-                    serializer.serialize_i64(*v.first().unwrap())
+                    serializer.serialize_i64(v.first().unwrap().0)
                 } else {
                     serializer.collect_seq(v.iter())
                 }
