@@ -255,6 +255,15 @@ pub struct Recipe {
     pub error: Vec<NodeID>,
 }
 
+impl FromStr for Recipe {
+    type Err = serde_json::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Some recipes need a two-phase parse because they use keys as comments
+        let v: serde_json::Value = serde_json::from_str(s)?;
+        serde_json::from_value(v)
+    }
+}
+
 #[derive(PartialEq, Hash, Eq, Copy, Clone)]
 enum NodeVertex {
     Start,
@@ -888,10 +897,7 @@ mod tests {
                 [1, []]
             ]
           }"#;
-        let v: serde_json::Value = from_str(s).unwrap();
-        // Let's try this from value
-        let r: Recipe = serde_json::from_value(v).unwrap();
-        // let r: Recipe = from_str(s).unwrap();
+        let r: Recipe = s.parse().unwrap();
         println!("{r:#?}");
     }
 
