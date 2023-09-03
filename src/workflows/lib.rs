@@ -91,7 +91,7 @@ impl<'de> Visitor<'de> for NodeOutputVisitor {
     where
         E: serde::de::Error,
     {
-        Ok(NodeOutput::Direct(vec![NodeID(v)]))
+        Ok(NodeOutput::Direct(vec![NodeID::from(v)]))
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
@@ -516,7 +516,7 @@ mod tests {
             .unwrap()
             .validate()
             .unwrap_err(),
-            RecipeError::UnreferencedNode(2)
+            RecipeError::UnreferencedNode(NodeID(2))
         ));
         // And that there are no missing referenced nodes
         assert!(matches!(
@@ -529,7 +529,7 @@ mod tests {
             .unwrap()
             .validate()
             .unwrap_err(),
-            RecipeError::MissingNode(2)
+            RecipeError::MissingNode(NodeID(2))
         ));
     }
 
@@ -586,19 +586,21 @@ mod tests {
         println!("{recipe:#?}");
 
         assert!(matches!(
-            &recipe.nodes.get(&1).unwrap().output,
+            &recipe.nodes.get(&NodeID::from(1)).unwrap().output,
             NodeOutput::Lookup(_x)
         ));
 
-        let output = match &recipe.nodes.get(&1).unwrap().output {
+        let output = match &recipe.nodes.get(&NodeID::from(1)).unwrap().output {
             NodeOutput::Lookup(m) => m,
             _ => panic!("Unknown node type"),
         };
         let expected = HashMap::from([
-            ("one".to_owned(), vec![2 as NodeID]),
-            ("all".to_owned(), vec![3 as NodeID]),
+            ("one".to_owned(), vec![NodeID::from(2)]),
+            ("all".to_owned(), vec![NodeID::from(3)]),
         ]);
 
+        println!("Expected: {expected:?}");
+        println!("Output: {output:?}");
         // Does this just work?
         assert!(&expected == output);
     }
@@ -629,11 +631,13 @@ mod tests {
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
 
         // Check reassigning this to an unknown node should still error
-        recipe.nodes.get_mut(&(3 as NodeID)).unwrap().output = NodeOutput::Direct(vec![4]);
+        recipe.nodes.get_mut(&(NodeID::from(3))).unwrap().output =
+            NodeOutput::Direct(vec![NodeID::from(4)]);
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
 
         // Check that we pick up a node pointing to itself
-        recipe.nodes.get_mut(&(3 as NodeID)).unwrap().output = NodeOutput::Direct(vec![3]);
+        recipe.nodes.get_mut(&(NodeID::from(3))).unwrap().output =
+            NodeOutput::Direct(vec![NodeID::from(3)]);
         assert!(all_reachable_dag_nodes(&recipe, NodeVertex::Error).is_err());
     }
 
