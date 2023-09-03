@@ -194,7 +194,6 @@ impl Serialize for NodeOutput {
 /// A Recipe node. Describes the destination queue, connections and
 /// other data that the service instance will use to process the node.
 #[derive(Serialize, Deserialize, Debug)]
-// #[serde(deny_unknown_fields)]
 pub struct Node {
     /// The message broken queue that this recipe will be posted to
     pub queue: String,
@@ -210,6 +209,9 @@ pub struct Node {
     pub error: NodeOutput,
     #[serde(default)]
     pub parameters: serde_json::Map<String, serde_json::Value>,
+
+    #[serde(flatten)]
+    pub other_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for Node {
@@ -224,7 +226,7 @@ impl Node {
             service: None,
             output: NodeOutput::None,
             error: NodeOutput::None,
-            parameters: Default::default(),
+            ..Default::default()
         }
     }
     /// Generate a list of every possible declared destination node from
