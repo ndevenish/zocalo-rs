@@ -433,6 +433,8 @@ pub struct RecipeWrapper {}
 
 #[cfg(test)]
 mod tests {
+    use std::{env, ffi::OsStr, fs};
+
     use super::*;
     use serde_json::from_str;
 
@@ -912,5 +914,27 @@ mod tests {
         )
         .unwrap();
         println!("{r:#?}");
+    }
+
+    #[test]
+    fn test_zocalo_recipe_library() {
+        let zocalo_recipe_dir = match env::var("ZOCALO_RECIPES") {
+            Ok(s) => s,
+            Err(_) => {
+                println!("Warning: Not running recipe library tests as no ZOCALO_RECIPES dir set");
+                return;
+            }
+        };
+        println!("Reading zocalo recipes from: {zocalo_recipe_dir}");
+
+        for path in std::fs::read_dir(zocalo_recipe_dir)
+            .unwrap()
+            .map(|f| f.unwrap().path())
+            .filter(|p| p.extension() == Some(OsStr::new("json")))
+        {
+            println!("Parsing {path:?}");
+            let r: Recipe = fs::read_to_string(path).unwrap().parse().unwrap();
+            r.validate().unwrap();
+        }
     }
 }
