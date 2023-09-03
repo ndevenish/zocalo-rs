@@ -208,6 +208,8 @@ pub struct Node {
     #[serde(default)]
     #[serde(skip_serializing_if = "NodeOutput::is_empty")]
     pub error: NodeOutput,
+    #[serde(default)]
+    pub parameters: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for Node {
@@ -221,7 +223,8 @@ impl Node {
             queue: String::new(),
             service: None,
             output: NodeOutput::None,
-            error: NodeOutput::None, // error: None,
+            error: NodeOutput::None,
+            parameters: Default::default(),
         }
     }
     /// Generate a list of every possible declared destination node from
