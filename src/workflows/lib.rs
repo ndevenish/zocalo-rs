@@ -27,16 +27,6 @@ impl Display for NodeID {
     }
 }
 
-/// Enum for intermediate parsing of NodeID. In the recipe, this can be
-/// represented as both a numeric string, and an integer. Using this
-/// intermediate format lets us just rely on serde default parsing.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum IntermediateNodeID {
-    Int(NodeID),
-    String(String),
-}
-
 /// Represents a set of outputs for a node in a recipe.
 ///
 /// There are three kinds:
@@ -78,6 +68,16 @@ impl Default for NodeOutput {
 }
 
 struct NodeOutputVisitor;
+
+/// Enum for intermediate parsing of NodeID. In the recipe, this can be
+/// represented as both a numeric string, and an integer. Using this
+/// intermediate format lets us just rely on serde default parsing.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum IntermediateNodeID {
+    Int(NodeID),
+    String(String),
+}
 
 impl<'de> Visitor<'de> for NodeOutputVisitor {
     type Value = NodeOutput;
