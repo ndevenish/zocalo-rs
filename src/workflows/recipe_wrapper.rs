@@ -11,11 +11,16 @@ use crate::{NodeID, Recipe};
 ///   sent (presumably to the currently-running service)
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RecipeWrapper {
-    recipe: Recipe,
+    /// The current in-progress recipe
+    pub recipe: Recipe,
     #[serde(alias = "recipe-pointer")]
-    recipe_pointer: NodeID,
+    /// The current recipe node
+    pub recipe_pointer: NodeID,
+    /// The route this recipe has previously taken
     #[serde(alias = "recipe-path")]
-    recipe_path: Vec<NodeID>,
-    environment: serde_json::Map<String, serde_json::Value>,
-    payload: serde_json::Value,
+    pub recipe_path: Vec<NodeID>,
+    /// Recipe-wide key-value configurations
+    pub environment: serde_json::Map<String, serde_json::Value>,
+    /// The message content for this node of the recipe
+    pub payload: serde_json::Value,
 }
