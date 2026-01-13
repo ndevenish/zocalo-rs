@@ -1,19 +1,4 @@
-use std::collections::HashMap;
+pub mod configuration;
 
-struct Environment {}
-
-struct Environments {
-    default: String,
-    environments: HashMap<String, Environment>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use configuration::{ConfigError, Configuration, Environment, PluginConfig, PluginDefinition};
+pub use configuration::plugins;
