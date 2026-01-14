@@ -41,7 +41,7 @@ pub enum ConfigError {
 /// Each plugin type has an `Option` field that contains the last activated
 /// plugin of that type. Storage plugins are merged into a single lookup table.
 #[derive(Debug, Clone, Default)]
-pub struct ActivatedEnvironment {
+pub struct Configuration {
     /// The activated environment names, if any.
     pub environments: Vec<String>,
     /// Graylog configuration.
@@ -67,7 +67,7 @@ pub struct ActivatedEnvironment {
 }
 
 #[derive(Debug)]
-pub struct Configuration {
+pub struct ConfigurationManager {
     version: u32,
     environments: HashMap<String, Environment>,
     plugin_definitions: HashMap<String, PluginDefinition>,
@@ -92,7 +92,7 @@ pub const ZOCALO_DEFAULT_ENV: &str = "ZOCALO_DEFAULT_ENV";
 /// ```
 /// This returns an [`ActivatedEnvironment`], from which individial
 /// plugin settings can be read, if present.
-impl Configuration {
+impl ConfigurationManager {
     /// Load configuration from the `ZOCALO_CONFIG` environment variable.
     ///
     /// Returns an empty configuration if the variable is not set.
@@ -105,7 +105,7 @@ impl Configuration {
 
     /// Create an empty configuration with no environments or plugins.
     pub fn empty() -> Self {
-        Configuration {
+        ConfigurationManager {
             version: 1,
             environments: HashMap::new(),
             plugin_definitions: HashMap::new(),
@@ -136,7 +136,7 @@ impl Configuration {
             return Err(ConfigError::UnsupportedVersion(raw.version));
         }
 
-        let mut config = Configuration {
+        let mut config = ConfigurationManager {
             version: raw.version,
             environments: HashMap::new(),
             plugin_definitions: HashMap::new(),
@@ -308,8 +308,8 @@ impl Configuration {
     /// configurations. For most plugin types, the last activated plugin wins.
     ///
     /// Storage plugins are merged into a single lookup table.
-    pub fn resolve(&mut self) -> Result<ActivatedEnvironment, ConfigError> {
-        let mut result = ActivatedEnvironment {
+    pub fn resolve(&mut self) -> Result<Configuration, ConfigError> {
+        let mut result = Configuration {
             environments: self.activated.clone(),
             ..Default::default()
         };
@@ -461,14 +461,14 @@ environments:
 
     #[test]
     fn test_parse_basic_config() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
         assert_eq!(config.version(), 1);
         println!("{config:#?}");
     }
 
     #[test]
     fn test_environments() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
         let envs: Vec<_> = config.environments().collect();
         assert!(envs.contains(&"live"));
         assert!(envs.contains(&"dev"));
@@ -477,7 +477,7 @@ environments:
 
     #[test]
     fn test_plugin_definitions() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
 
         // Check inline plugin
         let graylog = config.get_plugin("graylog-basic").unwrap();
@@ -490,7 +490,7 @@ environments:
 
     #[test]
     fn test_graylog_plugin() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
         if let Some(PluginDefinition::Resolved(PluginConfig::Graylog(graylog))) =
             config.get_plugin("graylog-basic")
         {
@@ -504,7 +504,7 @@ environments:
 
     #[test]
     fn test_storage_plugin() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
         if let Some(PluginDefinition::Resolved(PluginConfig::Storage(storage))) =
             config.get_plugin("storage-config")
         {
@@ -517,13 +517,13 @@ environments:
     #[test]
     fn test_unsupported_version() {
         let config_str = "version: 2\nenvironments: {}";
-        let result = Configuration::from_string(config_str);
+        let result = ConfigurationManager::from_string(config_str);
         assert!(matches!(result, Err(ConfigError::UnsupportedVersion(2))));
     }
 
     #[test]
     fn test_parse_sample_config() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
 
         // Check version
         assert_eq!(config.version(), 1);
@@ -586,7 +586,7 @@ environments:
 
     #[test]
     fn test_logging_plugin() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
 
         if let Some(PluginDefinition::Resolved(PluginConfig::Logging(logging))) =
             config.get_plugin("logging-production")
@@ -609,7 +609,7 @@ environments:
 
     #[test]
     fn test_activate_returns_consolidated_environment() {
-        let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let mut config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
 
         // Activate the "live" environment
         config.activate(Some(&["live"])).unwrap();
@@ -665,7 +665,7 @@ environments:
     - storage-a
     - storage-b
 "#;
-        let mut config = Configuration::from_string(config_str).unwrap();
+        let mut config = ConfigurationManager::from_string(config_str).unwrap();
         config.activate(Some(&["test"])).unwrap();
         let activated = config.resolve().unwrap();
 

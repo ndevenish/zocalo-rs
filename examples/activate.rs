@@ -2,7 +2,7 @@ use std::process;
 
 use clap::{ArgAction, Parser};
 use colored::Colorize;
-use zocalo::{ActivatedEnvironment, Configuration};
+use zocalo::{Configuration, ConfigurationManager};
 
 /// Activate and display a Zocalo environment
 #[derive(Parser)]
@@ -21,8 +21,8 @@ fn main() {
     let args = Args::parse();
 
     let config = match &args.config {
-        Some(path) => Configuration::from_file(path),
-        None => Configuration::from_env(),
+        Some(path) => ConfigurationManager::from_file(path),
+        None => ConfigurationManager::from_env(),
     };
 
     let mut config = match config {
@@ -52,7 +52,7 @@ fn main() {
     print_activated(&config);
 }
 
-fn print_activated(activated: &ActivatedEnvironment) {
+fn print_activated(activated: &Configuration) {
     println!(
         "{}: {}",
         "Environments".cyan().bold(),
