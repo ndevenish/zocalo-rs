@@ -1,25 +1,26 @@
-use std::env;
 use std::process;
 
+use clap::Parser;
 use colored::Colorize;
 use zocalo::{ActivatedEnvironment, Configuration};
 
+/// Activate and display a Zocalo environment
+#[derive(Parser)]
+#[command(name = "activate")]
+struct Args {
+    /// Path to the configuration file (or set ZOCALO_CONFIG)
+    #[arg(short, long)]
+    config: Option<String>,
+
+    /// Environment to activate (or set ZOCALO_DEFAULT_ENV)
+    #[arg(short, long)]
+    environment: Option<String>,
+}
+
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args = Args::parse();
 
-    if args.len() > 3 {
-        eprintln!(
-            "{}: {} [config-file] [environment]",
-            "Usage".yellow(),
-            args[0]
-        );
-        process::exit(1);
-    }
-
-    let config_file = args.get(1).map(|s| s.as_str());
-    let environment = args.get(2).map(|s| s.as_str());
-
-    let config = match config_file {
+    let config = match &args.config {
         Some(path) => Configuration::from_file(path),
         None => Configuration::from_env(),
     };
@@ -32,7 +33,7 @@ fn main() {
         }
     };
 
-    let activated = match config.activate(environment) {
+    let activated = match config.activate(args.environment.as_deref()) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("{}: {}", "Error".red().bold(), e);

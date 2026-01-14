@@ -1,20 +1,21 @@
-use std::env;
 use std::process;
 
+use clap::Parser;
 use colored::Colorize;
 use zocalo::{Configuration, PluginConfig, PluginDefinition};
 
+/// Dump a Zocalo configuration file
+#[derive(Parser)]
+#[command(name = "config-dump")]
+struct Args {
+    /// Path to the configuration file
+    config_file: String,
+}
+
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args = Args::parse();
 
-    if args.len() != 2 {
-        eprintln!("{}: {} <config-file>", "Usage".yellow(), args[0]);
-        process::exit(1);
-    }
-
-    let config_path = &args[1];
-
-    let config = match Configuration::from_file(config_path) {
+    let config = match Configuration::from_file(&args.config_file) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{}: {}", "Error".red().bold(), e);
