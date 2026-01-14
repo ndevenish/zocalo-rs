@@ -62,6 +62,7 @@ pub struct ActivatedEnvironment {
     pub transport: Option<TransportConfig>,
     /// Merged storage values from all storage plugins.
     pub storage: HashMap<String, serde_yaml::Value>,
+    /// Any unknown plugins
     pub unknown: Vec<UnknownConfig>,
 }
 
