@@ -66,6 +66,14 @@ pub struct Configuration {
     pub unknown: Vec<UnknownConfig>,
 }
 
+impl Configuration {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let cm = ConfigurationManager::from_env()?;
+        cm.activate(None);
+        cm.resolve()
+    }
+}
+
 #[derive(Debug)]
 pub struct ConfigurationManager {
     version: u32,
