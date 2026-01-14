@@ -156,6 +156,7 @@ impl Configuration {
         Self::from_string_with_base(content, std::env::current_dir().unwrap_or_default())
     }
 
+    /// Load a configuration from a String, with a explicit working dir
     fn from_string_with_base(content: &str, base_path: PathBuf) -> Result<Self, ConfigError> {
         let raw: RawConfiguration = serde_yaml::from_str(content)?;
 
@@ -209,10 +210,6 @@ impl Configuration {
         }
 
         Ok(config)
-    }
-
-    pub fn version(&self) -> u32 {
-        self.version
     }
 
     pub fn environments(&self) -> impl Iterator<Item = &str> {
