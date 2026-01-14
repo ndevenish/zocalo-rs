@@ -4,4 +4,4 @@ repos:
     hooks:
       - id: fmt
       - id: clippy
-        args: ["--", "-D", "warnings"]
+        args: ["--all-targets", "--", "-D", "warnings"]
