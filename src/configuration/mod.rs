@@ -110,7 +110,10 @@ use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
 pub use environment::Environment;
-pub use plugins::{PluginConfig, PluginDefinition};
+pub use plugins::{
+    GraylogConfig, JmxConfig, LoggingConfig, PluginConfig, PluginDefinition, RabbitMQApiConfig,
+    SlurmConfig, SmtpConfig, TransportConfig,
+};
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -130,6 +133,32 @@ pub enum ConfigError {
     UndefinedPlugin(String),
     #[error("Failed to resolve plugin '{0}': {1}")]
     PluginResolutionError(String, String),
+}
+
+/// A consolidated view of all plugins from activated environments.
+///
+/// Each plugin type has an `Option` field that contains the last activated
+/// plugin of that type. Storage plugins are merged into a single lookup table.
+#[derive(Debug, Clone, Default)]
+pub struct ActivatedEnvironment {
+    /// Activated environment names in order.
+    pub environments: Vec<String>,
+    /// Graylog configuration (last activated wins).
+    pub graylog: Option<GraylogConfig>,
+    /// Logging configuration (last activated wins).
+    pub logging: Option<LoggingConfig>,
+    /// Transport configuration (last activated wins).
+    pub transport: Option<TransportConfig>,
+    /// Slurm configuration (last activated wins).
+    pub slurm: Option<SlurmConfig>,
+    /// RabbitMQ API configuration (last activated wins).
+    pub rabbitmqapi: Option<RabbitMQApiConfig>,
+    /// SMTP configuration (last activated wins).
+    pub smtp: Option<SmtpConfig>,
+    /// JMX configuration (last activated wins).
+    pub jmx: Option<JmxConfig>,
+    /// Merged storage values from all storage plugins.
+    pub storage: HashMap<String, serde_yaml::Value>,
 }
 
 #[derive(Debug)]
@@ -326,12 +355,19 @@ impl Configuration {
         Ok(())
     }
 
-    /// Activate environments.
+    /// Activate environments and return a consolidated view of all plugins.
     ///
     /// If no environments are specified, falls back to:
     /// 1. The `ZOCALO_DEFAULT_ENV` environment variable
     /// 2. The "default" environment (if defined)
-    pub fn activate(&mut self, envs: Option<&[&str]>) -> Result<Vec<String>, ConfigError> {
+    ///
+    /// Returns an `ActivatedEnvironment` containing all resolved plugin
+    /// configurations. For most plugin types, the last activated plugin wins.
+    /// Storage plugins are merged into a single lookup table.
+    pub fn activate(
+        &mut self,
+        envs: Option<&[&str]>,
+    ) -> Result<ActivatedEnvironment, ConfigError> {
         let envs_to_activate: Vec<String> = match envs {
             Some(e) if !e.is_empty() => e.iter().map(|s| s.to_string()).collect(),
             _ => {
@@ -346,11 +382,41 @@ impl Configuration {
             }
         };
 
-        for env in &envs_to_activate {
-            self.activate_environment(env)?;
+        let mut result = ActivatedEnvironment {
+            environments: envs_to_activate.clone(),
+            ..Default::default()
+        };
+
+        for env_name in &envs_to_activate {
+            self.activate_environment(env_name)?;
+
+            // Collect plugin names first to avoid borrow issues
+            let plugin_names: Vec<String> = self
+                .environments
+                .get(env_name)
+                .unwrap()
+                .all_plugins()
+                .map(|s| s.to_string())
+                .collect();
+
+            for plugin_name in plugin_names {
+                let plugin = self.resolve_plugin(&plugin_name)?;
+                match plugin {
+                    PluginConfig::Graylog(c) => result.graylog = Some(c.clone()),
+                    PluginConfig::Logging(c) => result.logging = Some(c.clone()),
+                    PluginConfig::Transport(c) => result.transport = Some(c.clone()),
+                    PluginConfig::Slurm(c) => result.slurm = Some(c.clone()),
+                    PluginConfig::RabbitMQApi(c) => result.rabbitmqapi = Some(c.clone()),
+                    PluginConfig::Smtp(c) => result.smtp = Some(c.clone()),
+                    PluginConfig::Jmx(c) => result.jmx = Some(c.clone()),
+                    PluginConfig::Storage(c) => {
+                        result.storage.extend(c.values.clone());
+                    }
+                }
+            }
         }
 
-        Ok(envs_to_activate)
+        Ok(result)
     }
 }
 
@@ -602,5 +668,72 @@ environments:
         } else {
             panic!("Expected logging-production plugin");
         }
+    }
+
+    #[test]
+    fn test_activate_returns_consolidated_environment() {
+        let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+
+        // Activate the "live" environment
+        let activated = config.activate(Some(&["live"])).unwrap();
+
+        // Check environments list
+        assert_eq!(activated.environments, vec!["live"]);
+
+        // Check graylog was activated
+        assert!(activated.graylog.is_some());
+        let graylog = activated.graylog.unwrap();
+        assert_eq!(graylog.host, "graylog.example.com");
+        assert_eq!(graylog.port, 12201);
+
+        // Check transport was activated
+        assert!(activated.transport.is_some());
+        let transport = activated.transport.unwrap();
+        assert_eq!(transport.default, "PikaTransport");
+
+        // Check storage was merged
+        assert!(activated.storage.contains_key("zocalo.recipe_directory"));
+
+        // Check other plugins are None
+        assert!(activated.logging.is_none());
+        assert!(activated.slurm.is_none());
+        assert!(activated.rabbitmqapi.is_none());
+        assert!(activated.smtp.is_none());
+        assert!(activated.jmx.is_none());
+    }
+
+    #[test]
+    fn test_activate_merges_storage() {
+        let config_str = r#"
+version: 1
+
+storage-a:
+  plugin: storage
+  key.a: value-a
+  key.shared: from-a
+
+storage-b:
+  plugin: storage
+  key.b: value-b
+  key.shared: from-b
+
+environments:
+  test:
+    plugins:
+    - storage-a
+    - storage-b
+"#;
+        let mut config = Configuration::from_string(config_str).unwrap();
+        let activated = config.activate(Some(&["test"])).unwrap();
+
+        // Both storage keys should be present
+        assert!(activated.storage.contains_key("key.a"));
+        assert!(activated.storage.contains_key("key.b"));
+
+        // Shared key should have value from last plugin (storage-b)
+        assert_eq!(
+            activated.storage.get("key.shared"),
+            Some(&serde_yaml::Value::String("from-b".to_string()))
+        );
     }
 }
