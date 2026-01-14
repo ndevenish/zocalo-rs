@@ -364,10 +364,7 @@ impl Configuration {
     /// Returns an `ActivatedEnvironment` containing all resolved plugin
     /// configurations. For most plugin types, the last activated plugin wins.
     /// Storage plugins are merged into a single lookup table.
-    pub fn activate(
-        &mut self,
-        envs: Option<&[&str]>,
-    ) -> Result<ActivatedEnvironment, ConfigError> {
+    pub fn activate(&mut self, envs: Option<&[&str]>) -> Result<ActivatedEnvironment, ConfigError> {
         let envs_to_activate: Vec<String> = match envs {
             Some(e) if !e.is_empty() => e.iter().map(|s| s.to_string()).collect(),
             _ => {
