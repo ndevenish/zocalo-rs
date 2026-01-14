@@ -238,8 +238,9 @@ impl Configuration {
             _ => unreachable!(),
         };
 
-        let content = fs::read_to_string(&path)
-            .map_err(|e| ConfigError::PluginResolutionError(name.to_string(), e.to_string()))?;
+        let content = fs::read_to_string(&path).map_err(|e| {
+            ConfigError::PluginResolutionError(name.to_string(), format!("{:?}: {e}", &path))
+        })?;
 
         let plugin_config: PluginConfig = serde_yaml::from_str(&content)
             .map_err(|e| ConfigError::PluginResolutionError(name.to_string(), e.to_string()))?;
