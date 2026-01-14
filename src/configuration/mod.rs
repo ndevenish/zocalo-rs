@@ -604,7 +604,8 @@ environments:
         let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         // Activate the "live" environment
-        let activated = config.activate(Some(&["live"])).unwrap();
+        config.activate(Some(&["live"])).unwrap();
+        let activated = config.resolve().unwrap();
 
         // Check environments list
         assert_eq!(activated.environments, vec!["live"]);
@@ -653,7 +654,8 @@ environments:
     - storage-b
 "#;
         let mut config = Configuration::from_string(config_str).unwrap();
-        let activated = config.activate(Some(&["test"])).unwrap();
+        config.activate(Some(&["test"])).unwrap();
+        let activated = config.resolve().unwrap();
 
         // Both storage keys should be present
         assert!(activated.storage.contains_key("key.a"));
