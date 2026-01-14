@@ -68,8 +68,8 @@ pub struct Configuration {
 
 impl Configuration {
     pub fn from_env() -> Result<Self, ConfigError> {
-        let cm = ConfigurationManager::from_env()?;
-        cm.activate(None);
+        let mut cm = ConfigurationManager::from_env()?;
+        cm.activate(None)?;
         cm.resolve()
     }
 }
@@ -285,12 +285,14 @@ impl ConfigurationManager {
     /// If no environments are specified, falls back to:
     /// 1. The `ZOCALO_DEFAULT_ENV` environment variable
     /// 2. The "default" environment (if defined)
-    pub fn activate<T: AsRef<str> + std::fmt::Display>(
+    ///
+    /// Accepts `None`, `vec!["env1", "env2"]`, or `Some(vec![...])`.
+    pub fn activate(
         &mut self,
-        envs: Option<&[T]>,
+        envs: impl Into<Option<Vec<String>>>,
     ) -> Result<Vec<String>, ConfigError> {
-        let envs_to_activate: Vec<String> = match envs {
-            Some(e) if !e.is_empty() => e.iter().map(|s| s.to_string()).collect(),
+        let envs_to_activate: Vec<String> = match envs.into() {
+            Some(e) if !e.is_empty() => e,
             _ => {
                 // Check ZOCALO_DEFAULT_ENV first
                 if let Ok(env) = std::env::var(ZOCALO_DEFAULT_ENV) {
@@ -620,7 +622,7 @@ environments:
         let mut config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
 
         // Activate the "live" environment
-        config.activate(Some(&["live"])).unwrap();
+        config.activate(vec!["live".to_string()]).unwrap();
         let activated = config.resolve().unwrap();
 
         // Check environments list
@@ -674,7 +676,7 @@ environments:
     - storage-b
 "#;
         let mut config = ConfigurationManager::from_string(config_str).unwrap();
-        config.activate(Some(&["test"])).unwrap();
+        config.activate(vec!["test".to_string()]).unwrap();
         let activated = config.resolve().unwrap();
 
         // Both storage keys should be present

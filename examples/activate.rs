@@ -33,7 +33,11 @@ fn main() {
         }
     };
 
-    match config.activate(Some(&args.environment)) {
+    match config.activate(if args.environment.is_empty() {
+        None
+    } else {
+        Some(args.environment.clone())
+    }) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("{}: {}", "Error".red().bold(), e);
