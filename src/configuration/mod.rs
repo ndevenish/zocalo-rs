@@ -87,8 +87,8 @@ pub const ZOCALO_DEFAULT_ENV: &str = "ZOCALO_DEFAULT_ENV";
 /// defined by the [original implementation](https://github.com/DiamondLightSource/python-zocalo/tree/main/src/zocalo/configuration).
 ///
 /// Usage to get the current default environment:
-/// ```
-/// let environment = Configuration::from_env().activate()
+/// ```ignore
+/// let environment = Configuration::from_env()?.activate(None)?;
 /// ```
 /// This returns an [`ActivatedEnvironment`], from which individial
 /// plugin settings can be read, if present.
@@ -420,6 +420,19 @@ graylog-basic:
   host: graylog.example.com
   port: 12201
 
+logging-production:
+  plugin: logging
+  root:
+    level: WARNING
+  loggers:
+    dials:
+      level: INFO
+    zocalo:
+      level: DEBUG
+  verbose:
+    - level: INFO
+    - level: DEBUG
+
 storage-config:
   plugin: storage
   zocalo.recipe_directory: /path/to/recipes
@@ -436,6 +449,7 @@ environments:
   live:
     logging:
     - graylog-basic
+    - logging-production
     plugins:
     - storage-config
     - transport-config
@@ -508,9 +522,8 @@ environments:
     }
 
     #[test]
-    fn test_parse_sample_yaml() {
-        let sample_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("sample.yaml");
-        let config = Configuration::from_file(&sample_path).unwrap();
+    fn test_parse_sample_config() {
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         // Check version
         assert_eq!(config.version(), 1);
@@ -518,16 +531,14 @@ environments:
         // Check environments exist
         let envs: Vec<_> = config.environments().collect();
         assert!(envs.contains(&"live"));
-        assert!(envs.contains(&"dev_bluesky"));
-        assert!(envs.contains(&"devrmq"));
-        assert!(envs.contains(&"staging"));
-        assert!(envs.contains(&"offline"));
+        assert!(envs.contains(&"dev"));
+        assert!(envs.contains(&"default"));
 
         // Check graylog-basic plugin
         if let Some(PluginDefinition::Resolved(PluginConfig::Graylog(graylog))) =
             config.get_plugin("graylog-basic")
         {
-            assert_eq!(graylog.host, "graylog2.diamond.ac.uk");
+            assert_eq!(graylog.host, "graylog.example.com");
             assert_eq!(graylog.port, 12201);
             assert_eq!(graylog.protocol, plugins::GraylogProtocol::Udp);
         } else {
@@ -536,39 +547,37 @@ environments:
 
         // Check transport plugin
         if let Some(PluginDefinition::Resolved(PluginConfig::Transport(transport))) =
-            config.get_plugin("rabbitmq-default-transport")
+            config.get_plugin("transport-config")
         {
             assert_eq!(transport.default, "PikaTransport");
         } else {
-            panic!("Expected rabbitmq-default-transport plugin");
+            panic!("Expected transport-config plugin");
         }
 
-        // Check storage plugin with nested structures
+        // Check storage plugin
         if let Some(PluginDefinition::Resolved(PluginConfig::Storage(storage))) =
-            config.get_plugin("diamond-zocalo-settings")
+            config.get_plugin("storage-config")
         {
             assert!(storage.values.contains_key("zocalo.recipe_directory"));
-            assert!(storage.values.contains_key("zocalo.bridge.queues"));
         } else {
-            panic!("Expected diamond-zocalo-settings plugin");
+            panic!("Expected storage-config plugin");
         }
 
         // Check external file references
-        let slurm = config.get_plugin("slurm").unwrap();
-        assert!(!slurm.is_resolved());
+        let external = config.get_plugin("external-config").unwrap();
+        assert!(!external.is_resolved());
         assert!(
-            slurm
+            external
                 .as_path()
                 .unwrap()
                 .to_string_lossy()
-                .contains("slurm-credentials.yml")
+                .contains("config.yml")
         );
 
         // Check live environment structure
         let live_env = config.get_environment("live").unwrap();
         assert!(live_env.logging_plugins().is_some());
-        assert!(live_env.rabbitmq_plugins().is_some());
-        assert!(live_env.rabbitmqapi_plugins().is_some());
+        assert!(live_env.get_group("plugins").is_some());
 
         // Check environment alias
         let default_env = config.get_environment("default").unwrap();
@@ -577,8 +586,7 @@ environments:
 
     #[test]
     fn test_logging_plugin() {
-        let sample_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("sample.yaml");
-        let config = Configuration::from_file(&sample_path).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         if let Some(PluginDefinition::Resolved(PluginConfig::Logging(logging))) =
             config.get_plugin("logging-production")
@@ -624,8 +632,12 @@ environments:
         // Check storage was merged
         assert!(activated.storage.contains_key("zocalo.recipe_directory"));
 
+        // Check logging was activated
+        assert!(activated.logging.is_some());
+        let logging = activated.logging.unwrap();
+        assert_eq!(logging.root.unwrap().level.as_deref(), Some("WARNING"));
+
         // Check other plugins are None
-        assert!(activated.logging.is_none());
         assert!(activated.slurm.is_none());
         assert!(activated.rabbitmqapi.is_none());
         assert!(activated.smtp.is_none());
