@@ -1,4 +1,3 @@
-//! Parsing Zocalo configuration environment
 pub mod environment;
 pub mod format_spec;
 pub mod plugins;
@@ -78,6 +77,17 @@ pub const ZOCALO_CONFIG_ENV: &str = "ZOCALO_CONFIG";
 /// Environment variable for the default environment to activate.
 pub const ZOCALO_DEFAULT_ENV: &str = "ZOCALO_DEFAULT_ENV";
 
+/// Parse and resolve zocalo configuration files
+///
+/// See [`format_spec`] for the configuration file format specification,
+/// defined by the [original implementation](https://github.com/DiamondLightSource/python-zocalo/tree/main/src/zocalo/configuration).
+///
+/// Usage to get the current default environment:
+/// ```
+/// let environment = Configuration::from_env().activate()
+/// ```
+/// This returns an [`ActivatedEnvironment`], from which individial
+/// plugin settings can be read, if present.
 impl Configuration {
     /// Load configuration from the `ZOCALO_CONFIG` environment variable.
     ///

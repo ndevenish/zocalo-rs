@@ -1,3 +1,8 @@
+//! Support infrastructure for interacting with [Zocalo](https://github.com/diamondlightsource/python-zocalo) from Rust.
+//!
+//! Currently supports:
+//! - Loading configuration files and extracting data values from them, via [Configuration].
+
 pub mod configuration;
 
 pub use configuration::plugins;
