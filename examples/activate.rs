@@ -131,7 +131,12 @@ fn print_activated(activated: &ActivatedEnvironment) {
         println!(
             "  {} {}:{}",
             "server:".dimmed(),
-            rabbitmq.host.cyan(),
+            rabbitmq
+                .host
+                .iter()
+                .map(|s| s.cyan().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
             port_str.white()
         );
         println!("  {} {}", "username:".dimmed(), rabbitmq.username.white());
@@ -142,7 +147,16 @@ fn print_activated(activated: &ActivatedEnvironment) {
     // RabbitMQ API
     if let Some(rabbitmq) = &activated.rabbitmqapi {
         println!("{}:", "RabbitMQ API".green().bold());
-        println!("  {} {}", "base_url:".dimmed(), rabbitmq.base_url.cyan());
+        println!(
+            "  {} {}",
+            "base_url:".dimmed(),
+            rabbitmq
+                .base_url
+                .iter()
+                .map(|s| s.cyan().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
         println!("  {} {}", "username:".dimmed(), rabbitmq.username.white());
         println!("  {} {}", "vhost:".dimmed(), rabbitmq.vhost.white());
         println!();
