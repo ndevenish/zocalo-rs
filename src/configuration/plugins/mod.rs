@@ -128,7 +128,7 @@ impl<'de> Deserialize<'de> for PluginConfig {
                                 .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Slurm(config))
                     }
-                    "rabbitmq" => {
+                    "pika" => {
                         let config: RabbitMQConfig =
                             serde_yaml::from_value(hashmap_to_yaml_value(values))
                                 .map_err(de::Error::custom)?;
@@ -158,7 +158,7 @@ impl<'de> Deserialize<'de> for PluginConfig {
                             "graylog",
                             "jmx",
                             "logging",
-                            "rabbitmq",
+                            "pika",
                             "rabbitmqapi",
                             "slurm",
                             "smtp",
