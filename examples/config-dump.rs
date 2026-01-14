@@ -98,11 +98,14 @@ fn main() {
                     PluginConfig::Slurm(s) => ("slurm", s.url.clone()),
                     PluginConfig::RabbitMQ(r) => {
                         let port = r.port.map(|p| p.to_string()).unwrap_or_default();
-                        ("rabbitmq", format!("{}:{}", r.host, port))
+                        ("rabbitmq", format!("{}:{}", r.host.join(","), port))
                     }
-                    PluginConfig::RabbitMQApi(r) => ("rabbitmqapi", r.base_url.clone()),
+                    PluginConfig::RabbitMQApi(r) => ("rabbitmqapi", r.base_url.join(",")),
                     PluginConfig::Smtp(s) => ("smtp", format!("{}:{}", s.host, s.port)),
                     PluginConfig::Jmx(j) => ("jmx", format!("{}:{}", j.host, j.port)),
+                    PluginConfig::Unknown(u) => {
+                        (u.plugin.as_str(), format!("{} values", u.values.len()))
+                    }
                 };
                 println!(
                     "  {} {} {} {}",
