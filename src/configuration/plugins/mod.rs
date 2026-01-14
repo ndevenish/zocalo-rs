@@ -7,6 +7,7 @@ pub mod slurm;
 pub mod smtp;
 pub mod storage;
 pub mod transport;
+pub mod unknown;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -23,6 +24,7 @@ pub use slurm::SlurmConfig;
 pub use smtp::SmtpConfig;
 pub use storage::StorageConfig;
 pub use transport::TransportConfig;
+pub use unknown::UnknownConfig;
 
 #[derive(Debug, Clone)]
 pub enum PluginConfig {
@@ -35,6 +37,7 @@ pub enum PluginConfig {
     RabbitMQApi(RabbitMQApiConfig),
     Smtp(SmtpConfig),
     Jmx(JmxConfig),
+    Unknown(UnknownConfig),
 }
 
 #[derive(Debug, Clone)]
@@ -152,20 +155,13 @@ impl<'de> Deserialize<'de> for PluginConfig {
                                 .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Jmx(config))
                     }
-                    other => Err(de::Error::unknown_variant(
-                        other,
-                        &[
-                            "graylog",
-                            "jmx",
-                            "logging",
-                            "pika",
-                            "rabbitmqapi",
-                            "slurm",
-                            "smtp",
-                            "storage",
-                            "transport",
-                        ],
-                    )),
+                    plugin => {
+                        values.insert("plugin".to_string(), plugin.into());
+                        let config: UnknownConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
+                        Ok(PluginConfig::Unknown(config))
+                    }
                 }
             }
         }

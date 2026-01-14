@@ -208,6 +208,26 @@ fn print_activated(activated: &ActivatedEnvironment) {
                 println!("  {} {}", format!("{}:", key).yellow(), value_str.white());
             }
         }
+        println!();
+    }
+    if !activated.unknown.is_empty() {
+        println!("{}:", "Unknown Plugins".green().bold());
+        let mut unknown = activated.unknown.clone();
+        unknown.sort_by_key(|x| x.plugin.clone());
+        for obj in unknown.iter() {
+            println!("  {}:", obj.plugin.yellow());
+            for (key, yaml) in obj.values.iter() {
+                let value_str = format_yaml_value(&yaml);
+                if value_str.contains('\n') {
+                    println!("    {}:", key.white());
+                    for line in value_str.lines() {
+                        println!("      {}", line.white());
+                    }
+                } else {
+                    println!("    {} {}", format!("{}:", key).white(), value_str.white());
+                }
+            }
+        }
     }
 }
 

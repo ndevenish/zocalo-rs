@@ -13,7 +13,7 @@ use thiserror::Error;
 pub use environment::Environment;
 pub use plugins::{
     GraylogConfig, JmxConfig, LoggingConfig, PluginConfig, PluginDefinition, RabbitMQApiConfig,
-    RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig,
+    RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig, UnknownConfig,
 };
 
 #[derive(Error, Debug)]
@@ -62,6 +62,7 @@ pub struct ActivatedEnvironment {
     pub transport: Option<TransportConfig>,
     /// Merged storage values from all storage plugins.
     pub storage: HashMap<String, serde_yaml::Value>,
+    pub unknown: Vec<UnknownConfig>,
 }
 
 #[derive(Debug)]
@@ -320,6 +321,7 @@ impl Configuration {
                         result.storage.extend(c.values.clone());
                     }
                     PluginConfig::Transport(c) => result.transport = Some(c.clone()),
+                    PluginConfig::Unknown(c) => result.unknown.push(c.clone()),
                 }
             }
         }
