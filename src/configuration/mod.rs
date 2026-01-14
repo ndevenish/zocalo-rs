@@ -135,14 +135,14 @@ pub enum ConfigError {
     PluginResolutionError(String, String),
 }
 
-/// A consolidated view of all plugins from activated environments.
+/// A consolidated view of all plugins from an activated environment.
 ///
-/// Each plugin type has an `Option` field that contains the last activated
-/// plugin of that type. Storage plugins are merged into a single lookup table.
+/// Each plugin type has an `Option` field that contains the plugin config
+/// if one was activated. Storage plugins are merged into a single lookup table.
 #[derive(Debug, Clone, Default)]
 pub struct ActivatedEnvironment {
-    /// Activated environment names in order.
-    pub environments: Vec<String>,
+    /// The activated environment name, if any.
+    pub environment: Option<String>,
     /// Graylog configuration (last activated wins).
     pub graylog: Option<GraylogConfig>,
     /// Logging configuration (last activated wins).
@@ -355,36 +355,31 @@ impl Configuration {
         Ok(())
     }
 
-    /// Activate environments and return a consolidated view of all plugins.
+    /// Activate an environment and return a consolidated view of all plugins.
     ///
-    /// If no environments are specified, falls back to:
+    /// If no environment is specified, falls back to:
     /// 1. The `ZOCALO_DEFAULT_ENV` environment variable
     /// 2. The "default" environment (if defined)
     ///
     /// Returns an `ActivatedEnvironment` containing all resolved plugin
-    /// configurations. For most plugin types, the last activated plugin wins.
-    /// Storage plugins are merged into a single lookup table.
-    pub fn activate(&mut self, envs: Option<&[&str]>) -> Result<ActivatedEnvironment, ConfigError> {
-        let envs_to_activate: Vec<String> = match envs {
-            Some(e) if !e.is_empty() => e.iter().map(|s| s.to_string()).collect(),
-            _ => {
-                // Check ZOCALO_DEFAULT_ENV first
-                if let Ok(env) = std::env::var(ZOCALO_DEFAULT_ENV) {
-                    vec![env]
-                } else if let Some(default) = self.default_environment() {
-                    vec![default.to_string()]
-                } else {
-                    vec![]
-                }
+    /// configurations. Storage plugins are merged into a single lookup table.
+    pub fn activate(&mut self, env: Option<&str>) -> Result<ActivatedEnvironment, ConfigError> {
+        let env_to_activate: Option<String> = match env {
+            Some(e) => Some(e.to_string()),
+            None => {
+                // Check ZOCALO_DEFAULT_ENV first, then fall back to "default" environment
+                std::env::var(ZOCALO_DEFAULT_ENV)
+                    .ok()
+                    .or_else(|| self.default_environment().map(|s| s.to_string()))
             }
         };
 
         let mut result = ActivatedEnvironment {
-            environments: envs_to_activate.clone(),
+            environment: env_to_activate.clone(),
             ..Default::default()
         };
 
-        for env_name in &envs_to_activate {
+        if let Some(env_name) = &env_to_activate {
             self.activate_environment(env_name)?;
 
             // Collect plugin names first to avoid borrow issues
@@ -672,10 +667,10 @@ environments:
         let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         // Activate the "live" environment
-        let activated = config.activate(Some(&["live"])).unwrap();
+        let activated = config.activate(Some("live")).unwrap();
 
-        // Check environments list
-        assert_eq!(activated.environments, vec!["live"]);
+        // Check environment name
+        assert_eq!(activated.environment, Some("live".to_string()));
 
         // Check graylog was activated
         assert!(activated.graylog.is_some());
@@ -721,7 +716,7 @@ environments:
     - storage-b
 "#;
         let mut config = Configuration::from_string(config_str).unwrap();
-        let activated = config.activate(Some(&["test"])).unwrap();
+        let activated = config.activate(Some("test")).unwrap();
 
         // Both storage keys should be present
         assert!(activated.storage.contains_key("key.a"));
