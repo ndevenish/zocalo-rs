@@ -13,7 +13,7 @@ use thiserror::Error;
 pub use environment::Environment;
 pub use plugins::{
     GraylogConfig, JmxConfig, LoggingConfig, PluginConfig, PluginDefinition, RabbitMQApiConfig,
-    SlurmConfig, SmtpConfig, TransportConfig,
+    RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig,
 };
 
 #[derive(Error, Debug)]
@@ -44,20 +44,22 @@ pub enum ConfigError {
 pub struct ActivatedEnvironment {
     /// The activated environment name, if any.
     pub environment: Option<String>,
-    /// Graylog configuration (last activated wins).
+    /// Graylog configuration.
     pub graylog: Option<GraylogConfig>,
-    /// Logging configuration (last activated wins).
-    pub logging: Option<LoggingConfig>,
-    /// Transport configuration (last activated wins).
-    pub transport: Option<TransportConfig>,
-    /// Slurm configuration (last activated wins).
-    pub slurm: Option<SlurmConfig>,
-    /// RabbitMQ API configuration (last activated wins).
-    pub rabbitmqapi: Option<RabbitMQApiConfig>,
-    /// SMTP configuration (last activated wins).
-    pub smtp: Option<SmtpConfig>,
-    /// JMX configuration (last activated wins).
+    /// JMX configuration.
     pub jmx: Option<JmxConfig>,
+    /// Logging configuration.
+    pub logging: Option<LoggingConfig>,
+    /// RabbitMQ AMQP connection configuration.
+    pub rabbitmq: Option<RabbitMQConfig>,
+    /// RabbitMQ HTTP API configuration.
+    pub rabbitmqapi: Option<RabbitMQApiConfig>,
+    /// Slurm configuration.
+    pub slurm: Option<SlurmConfig>,
+    /// SMTP configuration.
+    pub smtp: Option<SmtpConfig>,
+    /// Transport configuration.
+    pub transport: Option<TransportConfig>,
     /// Merged storage values from all storage plugins.
     pub storage: HashMap<String, serde_yaml::Value>,
 }
@@ -307,15 +309,16 @@ impl Configuration {
                 let plugin = self.resolve_plugin(&plugin_name)?;
                 match plugin {
                     PluginConfig::Graylog(c) => result.graylog = Some(c.clone()),
-                    PluginConfig::Logging(c) => result.logging = Some(c.clone()),
-                    PluginConfig::Transport(c) => result.transport = Some(c.clone()),
-                    PluginConfig::Slurm(c) => result.slurm = Some(c.clone()),
-                    PluginConfig::RabbitMQApi(c) => result.rabbitmqapi = Some(c.clone()),
-                    PluginConfig::Smtp(c) => result.smtp = Some(c.clone()),
                     PluginConfig::Jmx(c) => result.jmx = Some(c.clone()),
+                    PluginConfig::Logging(c) => result.logging = Some(c.clone()),
+                    PluginConfig::RabbitMQ(c) => result.rabbitmq = Some(c.clone()),
+                    PluginConfig::RabbitMQApi(c) => result.rabbitmqapi = Some(c.clone()),
+                    PluginConfig::Slurm(c) => result.slurm = Some(c.clone()),
+                    PluginConfig::Smtp(c) => result.smtp = Some(c.clone()),
                     PluginConfig::Storage(c) => {
                         result.storage.extend(c.values.clone());
                     }
+                    PluginConfig::Transport(c) => result.transport = Some(c.clone()),
                 }
             }
         }

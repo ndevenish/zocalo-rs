@@ -1,6 +1,7 @@
 pub mod graylog;
 pub mod jmx;
 pub mod logging;
+pub mod rabbitmq;
 pub mod rabbitmqapi;
 pub mod slurm;
 pub mod smtp;
@@ -16,6 +17,7 @@ use serde::{Deserialize, Deserializer};
 pub use graylog::{GraylogConfig, GraylogProtocol};
 pub use jmx::JmxConfig;
 pub use logging::LoggingConfig;
+pub use rabbitmq::RabbitMQConfig;
 pub use rabbitmqapi::RabbitMQApiConfig;
 pub use slurm::SlurmConfig;
 pub use smtp::SmtpConfig;
@@ -29,6 +31,7 @@ pub enum PluginConfig {
     Storage(StorageConfig),
     Transport(TransportConfig),
     Slurm(SlurmConfig),
+    RabbitMQ(RabbitMQConfig),
     RabbitMQApi(RabbitMQApiConfig),
     Smtp(SmtpConfig),
     Jmx(JmxConfig),
@@ -125,6 +128,12 @@ impl<'de> Deserialize<'de> for PluginConfig {
                                 .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Slurm(config))
                     }
+                    "rabbitmq" => {
+                        let config: RabbitMQConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
+                        Ok(PluginConfig::RabbitMQ(config))
+                    }
                     "rabbitmqapi" => {
                         let config: RabbitMQApiConfig =
                             serde_yaml::from_value(hashmap_to_yaml_value(values))
@@ -147,13 +156,14 @@ impl<'de> Deserialize<'de> for PluginConfig {
                         other,
                         &[
                             "graylog",
+                            "jmx",
                             "logging",
+                            "rabbitmq",
+                            "rabbitmqapi",
+                            "slurm",
+                            "smtp",
                             "storage",
                             "transport",
-                            "slurm",
-                            "rabbitmqapi",
-                            "smtp",
-                            "jmx",
                         ],
                     )),
                 }

@@ -121,6 +121,24 @@ fn print_activated(activated: &ActivatedEnvironment) {
         println!();
     }
 
+    // RabbitMQ (AMQP)
+    if let Some(rabbitmq) = &activated.rabbitmq {
+        println!("{}:", "RabbitMQ".green().bold());
+        let port_str = rabbitmq
+            .port
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "(default)".to_string());
+        println!(
+            "  {} {}:{}",
+            "server:".dimmed(),
+            rabbitmq.host.cyan(),
+            port_str.white()
+        );
+        println!("  {} {}", "username:".dimmed(), rabbitmq.username.white());
+        println!("  {} {}", "vhost:".dimmed(), rabbitmq.vhost.white());
+        println!();
+    }
+
     // RabbitMQ API
     if let Some(rabbitmq) = &activated.rabbitmqapi {
         println!("{}:", "RabbitMQ API".green().bold());

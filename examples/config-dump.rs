@@ -96,6 +96,10 @@ fn main() {
                     PluginConfig::Storage(s) => ("storage", format!("{} keys", s.values.len())),
                     PluginConfig::Transport(t) => ("transport", format!("default: {}", t.default)),
                     PluginConfig::Slurm(s) => ("slurm", s.url.clone()),
+                    PluginConfig::RabbitMQ(r) => {
+                        let port = r.port.map(|p| p.to_string()).unwrap_or_default();
+                        ("rabbitmq", format!("{}:{}", r.host, port))
+                    }
                     PluginConfig::RabbitMQApi(r) => ("rabbitmqapi", r.base_url.clone()),
                     PluginConfig::Smtp(s) => ("smtp", format!("{}:{}", s.host, s.port)),
                     PluginConfig::Jmx(j) => ("jmx", format!("{}:{}", j.host, j.port)),
