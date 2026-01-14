@@ -1,8 +1,8 @@
 use std::process;
 
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use colored::Colorize;
-use zocalo::{ActivatedEnvironment, Configuration};
+use zocalo::{ActivatedEnvironment, Configuration, Environment};
 
 /// Activate and display a Zocalo environment
 #[derive(Parser)]
@@ -13,8 +13,8 @@ struct Args {
     config: Option<String>,
 
     /// Environment to activate (or set ZOCALO_DEFAULT_ENV)
-    #[arg(short, long)]
-    environment: Option<String>,
+    #[arg(short, long, action = ArgAction::Append)]
+    environment: Vec<String>,
 }
 
 fn main() {
@@ -33,7 +33,7 @@ fn main() {
         }
     };
 
-    let activated = match config.activate(args.environment.as_deref()) {
+    match config.activate(Some(&args.environment)) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("{}: {}", "Error".red().bold(), e);
@@ -41,18 +41,27 @@ fn main() {
         }
     };
 
-    print_activated(&activated);
+    let config = match config.resolve() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("{}: {}", "Error".red().bold(), e);
+            process::exit(1);
+        }
+    };
+
+    print_activated(&config);
 }
 
 fn print_activated(activated: &ActivatedEnvironment) {
     println!(
         "{}: {}",
-        "Environment".cyan().bold(),
+        "Environments".cyan().bold(),
         activated
-            .environment
-            .as_deref()
-            .unwrap_or("(none)")
-            .yellow()
+            .environments
+            .iter()
+            .map(|f| f.yellow().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     );
     println!();
 

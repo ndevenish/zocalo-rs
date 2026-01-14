@@ -272,16 +272,15 @@ impl Configuration {
         Ok(())
     }
 
-    /// Activate environments and return a consolidated view of all plugins.
+    /// Activate environments.
     ///
     /// If no environments are specified, falls back to:
     /// 1. The `ZOCALO_DEFAULT_ENV` environment variable
     /// 2. The "default" environment (if defined)
-    ///
-    /// Returns an `ActivatedEnvironment` containing all resolved plugin
-    /// configurations. For most plugin types, the last activated plugin wins.
-    /// Storage plugins are merged into a single lookup table.
-    pub fn activate(&mut self, envs: Option<&[&str]>) -> Result<ActivatedEnvironment, ConfigError> {
+    pub fn activate<T: AsRef<str> + std::fmt::Display>(
+        &mut self,
+        envs: Option<&[T]>,
+    ) -> Result<Vec<String>, ConfigError> {
         let envs_to_activate: Vec<String> = match envs {
             Some(e) if !e.is_empty() => e.iter().map(|s| s.to_string()).collect(),
             _ => {
@@ -296,18 +295,32 @@ impl Configuration {
             }
         };
 
+        for env in &envs_to_activate {
+            self.activate_environment(env)?;
+        }
+
+        Ok(envs_to_activate)
+    }
+
+    /// Resolve a unified view of all active environment settings
+    ///
+    /// Returns an `ActivatedEnvironment` containing all resolved plugin
+    /// configurations. For most plugin types, the last activated plugin wins.
+    ///
+    /// Storage plugins are merged into a single lookup table.
+    pub fn resolve(&mut self) -> Result<ActivatedEnvironment, ConfigError> {
         let mut result = ActivatedEnvironment {
-            environments: envs_to_activate.clone(),
+            environments: self.activated.clone(),
             ..Default::default()
         };
-
-        for env_name in &envs_to_activate {
-            self.activate_environment(env_name)?;
+        // Go through every active environment
+        for env_name in self.activated.clone() {
+            // self.activate_environment(env_name)?;
 
             // Collect plugin names first to avoid borrow issues
             let plugin_names: Vec<String> = self
                 .environments
-                .get(env_name)
+                .get(&env_name)
                 .unwrap()
                 .all_plugins()
                 .map(|s| s.to_string())
