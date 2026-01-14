@@ -141,7 +141,34 @@ pub struct Configuration {
     base_path: PathBuf,
 }
 
+/// Environment variable for the default configuration file path.
+pub const ZOCALO_CONFIG_ENV: &str = "ZOCALO_CONFIG";
+
+/// Environment variable for the default environment to activate.
+pub const ZOCALO_DEFAULT_ENV: &str = "ZOCALO_DEFAULT_ENV";
+
 impl Configuration {
+    /// Load configuration from the `ZOCALO_CONFIG` environment variable.
+    ///
+    /// Returns an empty configuration if the variable is not set.
+    pub fn from_env() -> Result<Self, ConfigError> {
+        match std::env::var(ZOCALO_CONFIG_ENV) {
+            Ok(path) => Self::from_file(path),
+            Err(_) => Ok(Self::empty()),
+        }
+    }
+
+    /// Create an empty configuration with no environments or plugins.
+    pub fn empty() -> Self {
+        Configuration {
+            version: 1,
+            environments: HashMap::new(),
+            plugin_definitions: HashMap::new(),
+            activated: Vec::new(),
+            base_path: std::env::current_dir().unwrap_or_default(),
+        }
+    }
+
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let path = path.as_ref();
         if !path.exists() {
@@ -210,6 +237,10 @@ impl Configuration {
         }
 
         Ok(config)
+    }
+
+    pub fn version(&self) -> u32 {
+        self.version
     }
 
     pub fn environments(&self) -> impl Iterator<Item = &str> {
@@ -295,11 +326,19 @@ impl Configuration {
         Ok(())
     }
 
+    /// Activate environments.
+    ///
+    /// If no environments are specified, falls back to:
+    /// 1. The `ZOCALO_DEFAULT_ENV` environment variable
+    /// 2. The "default" environment (if defined)
     pub fn activate(&mut self, envs: Option<&[&str]>) -> Result<Vec<String>, ConfigError> {
         let envs_to_activate: Vec<String> = match envs {
-            Some(e) => e.iter().map(|s| s.to_string()).collect(),
-            None => {
-                if let Some(default) = self.default_environment() {
+            Some(e) if !e.is_empty() => e.iter().map(|s| s.to_string()).collect(),
+            _ => {
+                // Check ZOCALO_DEFAULT_ENV first
+                if let Ok(env) = std::env::var(ZOCALO_DEFAULT_ENV) {
+                    vec![env]
+                } else if let Some(default) = self.default_environment() {
                     vec![default.to_string()]
                 } else {
                     vec![]

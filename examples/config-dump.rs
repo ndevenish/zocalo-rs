@@ -21,8 +21,6 @@ fn main() {
             process::exit(1);
         }
     };
-
-    println!("{} v{}", "Configuration".cyan().bold(), config.version());
     println!();
 
     // Print environments
@@ -53,11 +51,7 @@ fn main() {
             );
             for group in groups {
                 if let Some(plugins) = env.get_group(group) {
-                    println!(
-                        "    {}: {}",
-                        group.blue(),
-                        plugins.join(", ").white()
-                    );
+                    println!("    {}: {}", group.blue(), plugins.join(", ").white());
                 }
             }
         }
@@ -92,12 +86,14 @@ fn main() {
                     ),
                     PluginConfig::Logging(l) => (
                         "logging",
-                        format!("{} loggers, {} verbose levels", l.loggers.len(), l.verbose.len()),
+                        format!(
+                            "{} loggers, {} verbose levels",
+                            l.loggers.len(),
+                            l.verbose.len()
+                        ),
                     ),
                     PluginConfig::Storage(s) => ("storage", format!("{} keys", s.values.len())),
-                    PluginConfig::Transport(t) => {
-                        ("transport", format!("default: {}", t.default))
-                    }
+                    PluginConfig::Transport(t) => ("transport", format!("default: {}", t.default)),
                     PluginConfig::Slurm(s) => ("slurm", s.url.clone()),
                     PluginConfig::RabbitMQApi(r) => ("rabbitmqapi", r.base_url.clone()),
                     PluginConfig::Smtp(s) => ("smtp", format!("{}:{}", s.host, s.port)),
