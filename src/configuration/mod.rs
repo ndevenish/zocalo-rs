@@ -38,8 +38,12 @@ pub enum ConfigError {
 
 /// A consolidated view of all plugins from activated environments.
 ///
-/// Each plugin type has an `Option` field that contains the last activated
-/// plugin of that type. Storage plugins are merged into a single lookup table.
+/// Each plugin is present if at least one definition has been provided.
+/// Storage plugins are merged into a single lookup table, and anything
+/// unrecognised is stored onto the `unknown` member.
+///
+/// [`Configuration::from_env`] is the easiest way to construct a
+/// consolidated configuration from the active Zocalo environment.
 #[derive(Debug, Clone, Default)]
 pub struct Configuration {
     /// The activated environment names, if any.
