@@ -52,10 +52,15 @@ impl Environment {
 
     pub fn all_plugins(&self) -> impl Iterator<Item = &str> {
         // Return plugins in order: alphabetically sorted groups (except "plugins" which comes last)
-        let mut group_names: Vec<&String> = self.groups.keys().filter(|k| k.as_str() != "plugins").collect();
+        let mut group_names: Vec<&String> = self
+            .groups
+            .keys()
+            .filter(|k| k.as_str() != "plugins")
+            .collect();
         group_names.sort();
 
-        let plugins_group: Vec<&str> = self.groups
+        let plugins_group: Vec<&str> = self
+            .groups
             .get("plugins")
             .map(|v| v.iter().map(|s| s.as_str()).collect())
             .unwrap_or_default();

@@ -97,58 +97,64 @@ impl<'de> Deserialize<'de> for PluginConfig {
                     }
                 }
 
-                let plugin_type = plugin_type
-                    .ok_or_else(|| de::Error::missing_field("plugin"))?;
+                let plugin_type = plugin_type.ok_or_else(|| de::Error::missing_field("plugin"))?;
 
                 match plugin_type.as_str() {
                     "graylog" => {
-                        let config: GraylogConfig = serde_yaml::from_value(
-                            hashmap_to_yaml_value(values)
-                        ).map_err(de::Error::custom)?;
+                        let config: GraylogConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Graylog(config))
                     }
                     "logging" => {
-                        let config: LoggingConfig = serde_yaml::from_value(
-                            hashmap_to_yaml_value(values)
-                        ).map_err(de::Error::custom)?;
+                        let config: LoggingConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Logging(config))
                     }
-                    "storage" => {
-                        Ok(PluginConfig::Storage(StorageConfig { values }))
-                    }
+                    "storage" => Ok(PluginConfig::Storage(StorageConfig { values })),
                     "transport" => {
-                        let config: TransportConfig = serde_yaml::from_value(
-                            hashmap_to_yaml_value(values)
-                        ).map_err(de::Error::custom)?;
+                        let config: TransportConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Transport(config))
                     }
                     "slurm" => {
-                        let config: SlurmConfig = serde_yaml::from_value(
-                            hashmap_to_yaml_value(values)
-                        ).map_err(de::Error::custom)?;
+                        let config: SlurmConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Slurm(config))
                     }
                     "rabbitmqapi" => {
-                        let config: RabbitMQApiConfig = serde_yaml::from_value(
-                            hashmap_to_yaml_value(values)
-                        ).map_err(de::Error::custom)?;
+                        let config: RabbitMQApiConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
                         Ok(PluginConfig::RabbitMQApi(config))
                     }
                     "smtp" => {
-                        let config: SmtpConfig = serde_yaml::from_value(
-                            hashmap_to_yaml_value(values)
-                        ).map_err(de::Error::custom)?;
+                        let config: SmtpConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Smtp(config))
                     }
                     "jmx" => {
-                        let config: JmxConfig = serde_yaml::from_value(
-                            hashmap_to_yaml_value(values)
-                        ).map_err(de::Error::custom)?;
+                        let config: JmxConfig =
+                            serde_yaml::from_value(hashmap_to_yaml_value(values))
+                                .map_err(de::Error::custom)?;
                         Ok(PluginConfig::Jmx(config))
                     }
                     other => Err(de::Error::unknown_variant(
                         other,
-                        &["graylog", "logging", "storage", "transport", "slurm", "rabbitmqapi", "smtp", "jmx"],
+                        &[
+                            "graylog",
+                            "logging",
+                            "storage",
+                            "transport",
+                            "slurm",
+                            "rabbitmqapi",
+                            "smtp",
+                            "jmx",
+                        ],
                     )),
                 }
             }
