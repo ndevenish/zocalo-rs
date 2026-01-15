@@ -2,7 +2,7 @@ use std::process;
 
 use clap::Parser;
 use colored::Colorize;
-use zocalo::{ConfigurationManager, PluginConfig, PluginDefinition};
+use zocalo::{Configuration, PluginConfig, PluginDefinition};
 
 /// Dump a Zocalo configuration file
 #[derive(Parser)]
@@ -15,7 +15,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let config = match ConfigurationManager::from_file(&args.config_file) {
+    let config = match Configuration::from_file(&args.config_file) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{}: {}", "Error".red().bold(), e);

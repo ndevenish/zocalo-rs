@@ -36,50 +36,8 @@ pub enum ConfigError {
     PluginResolutionError(String, String),
 }
 
-/// A consolidated view of all plugins from activated environments.
-///
-/// Each plugin is present if at least one definition has been provided.
-/// Storage plugins are merged into a single lookup table, and anything
-/// unrecognised is stored onto the `unknown` member.
-///
-/// [`Configuration::from_env`] is the easiest way to construct a
-/// consolidated configuration from the active Zocalo environment.
-#[derive(Debug, Clone, Default)]
-pub struct Configuration {
-    /// The activated environment names, if any.
-    pub environments: Vec<String>,
-    /// Graylog configuration.
-    pub graylog: Option<GraylogConfig>,
-    /// JMX configuration.
-    pub jmx: Option<JmxConfig>,
-    /// Logging configuration.
-    pub logging: Option<LoggingConfig>,
-    /// RabbitMQ AMQP connection configuration.
-    pub rabbitmq: Option<RabbitMQConfig>,
-    /// RabbitMQ HTTP API configuration.
-    pub rabbitmqapi: Option<RabbitMQApiConfig>,
-    /// Slurm configuration.
-    pub slurm: Option<SlurmConfig>,
-    /// SMTP configuration.
-    pub smtp: Option<SmtpConfig>,
-    /// Transport configuration.
-    pub transport: Option<TransportConfig>,
-    /// Merged storage values from all storage plugins.
-    pub storage: HashMap<String, serde_yaml::Value>,
-    /// Any unknown plugins
-    pub unknown: Vec<UnknownConfig>,
-}
-
-impl Configuration {
-    pub fn from_env() -> Result<Self, ConfigError> {
-        let mut cm = ConfigurationManager::from_env()?;
-        cm.activate(None)?;
-        cm.resolve()
-    }
-}
-
 #[derive(Debug)]
-pub struct ConfigurationManager {
+pub struct Configuration {
     version: u32,
     environments: HashMap<String, Environment>,
     plugin_definitions: HashMap<String, PluginDefinition>,
@@ -104,7 +62,7 @@ pub const ZOCALO_DEFAULT_ENV: &str = "ZOCALO_DEFAULT_ENV";
 /// ```
 /// This returns an [`ActivatedEnvironment`], from which individial
 /// plugin settings can be read, if present.
-impl ConfigurationManager {
+impl Configuration {
     /// Load configuration from the `ZOCALO_CONFIG` environment variable.
     ///
     /// Returns an empty configuration if the variable is not set.
@@ -117,7 +75,7 @@ impl ConfigurationManager {
 
     /// Create an empty configuration with no environments or plugins.
     pub fn empty() -> Self {
-        ConfigurationManager {
+        Configuration {
             version: 1,
             environments: HashMap::new(),
             plugin_definitions: HashMap::new(),
@@ -148,7 +106,7 @@ impl ConfigurationManager {
             return Err(ConfigError::UnsupportedVersion(raw.version));
         }
 
-        let mut config = ConfigurationManager {
+        let mut config = Configuration {
             version: raw.version,
             environments: HashMap::new(),
             plugin_definitions: HashMap::new(),
@@ -315,52 +273,6 @@ impl ConfigurationManager {
 
         Ok(envs_to_activate)
     }
-
-    /// Resolve a unified view of all active environment settings
-    ///
-    /// Returns an `ActivatedEnvironment` containing all resolved plugin
-    /// configurations. For most plugin types, the last activated plugin wins.
-    ///
-    /// Storage plugins are merged into a single lookup table.
-    pub fn resolve(&mut self) -> Result<Configuration, ConfigError> {
-        let mut result = Configuration {
-            environments: self.activated.clone(),
-            ..Default::default()
-        };
-        // Go through every active environment
-        for env_name in self.activated.clone() {
-            // self.activate_environment(env_name)?;
-
-            // Collect plugin names first to avoid borrow issues
-            let plugin_names: Vec<String> = self
-                .environments
-                .get(&env_name)
-                .unwrap()
-                .all_plugins()
-                .map(|s| s.to_string())
-                .collect();
-
-            for plugin_name in plugin_names {
-                let plugin = self.resolve_plugin(&plugin_name)?;
-                match plugin {
-                    PluginConfig::Graylog(c) => result.graylog = Some(c.clone()),
-                    PluginConfig::Jmx(c) => result.jmx = Some(c.clone()),
-                    PluginConfig::Logging(c) => result.logging = Some(c.clone()),
-                    PluginConfig::RabbitMQ(c) => result.rabbitmq = Some(c.clone()),
-                    PluginConfig::RabbitMQApi(c) => result.rabbitmqapi = Some(c.clone()),
-                    PluginConfig::Slurm(c) => result.slurm = Some(c.clone()),
-                    PluginConfig::Smtp(c) => result.smtp = Some(c.clone()),
-                    PluginConfig::Storage(c) => {
-                        result.storage.extend(c.values.clone());
-                    }
-                    PluginConfig::Transport(c) => result.transport = Some(c.clone()),
-                    PluginConfig::Unknown(c) => result.unknown.push(c.clone()),
-                }
-            }
-        }
-
-        Ok(result)
-    }
 }
 
 // Raw deserialization types
@@ -475,14 +387,14 @@ environments:
 
     #[test]
     fn test_parse_basic_config() {
-        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
         assert_eq!(config.version(), 1);
         println!("{config:#?}");
     }
 
     #[test]
     fn test_environments() {
-        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
         let envs: Vec<_> = config.environments().collect();
         assert!(envs.contains(&"live"));
         assert!(envs.contains(&"dev"));
@@ -491,7 +403,7 @@ environments:
 
     #[test]
     fn test_plugin_definitions() {
-        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         // Check inline plugin
         let graylog = config.get_plugin("graylog-basic").unwrap();
@@ -504,7 +416,7 @@ environments:
 
     #[test]
     fn test_graylog_plugin() {
-        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
         if let Some(PluginDefinition::Resolved(PluginConfig::Graylog(graylog))) =
             config.get_plugin("graylog-basic")
         {
@@ -518,7 +430,7 @@ environments:
 
     #[test]
     fn test_storage_plugin() {
-        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
         if let Some(PluginDefinition::Resolved(PluginConfig::Storage(storage))) =
             config.get_plugin("storage-config")
         {
@@ -531,13 +443,13 @@ environments:
     #[test]
     fn test_unsupported_version() {
         let config_str = "version: 2\nenvironments: {}";
-        let result = ConfigurationManager::from_string(config_str);
+        let result = Configuration::from_string(config_str);
         assert!(matches!(result, Err(ConfigError::UnsupportedVersion(2))));
     }
 
     #[test]
     fn test_parse_sample_config() {
-        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         // Check version
         assert_eq!(config.version(), 1);
@@ -600,7 +512,7 @@ environments:
 
     #[test]
     fn test_logging_plugin() {
-        let config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
+        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         if let Some(PluginDefinition::Resolved(PluginConfig::Logging(logging))) =
             config.get_plugin("logging-production")
@@ -619,78 +531,5 @@ environments:
         } else {
             panic!("Expected logging-production plugin");
         }
-    }
-
-    #[test]
-    fn test_activate_returns_consolidated_environment() {
-        let mut config = ConfigurationManager::from_string(SAMPLE_CONFIG).unwrap();
-
-        // Activate the "live" environment
-        config.activate(vec!["live".to_string()]).unwrap();
-        let activated = config.resolve().unwrap();
-
-        // Check environments list
-        assert_eq!(activated.environments, vec!["live"]);
-
-        // Check graylog was activated
-        assert!(activated.graylog.is_some());
-        let graylog = activated.graylog.unwrap();
-        assert_eq!(graylog.host, "graylog.example.com");
-        assert_eq!(graylog.port, 12201);
-
-        // Check transport was activated
-        assert!(activated.transport.is_some());
-        let transport = activated.transport.unwrap();
-        assert_eq!(transport.default, "PikaTransport");
-
-        // Check storage was merged
-        assert!(activated.storage.contains_key("zocalo.recipe_directory"));
-
-        // Check logging was activated
-        assert!(activated.logging.is_some());
-        let logging = activated.logging.unwrap();
-        assert_eq!(logging.root.unwrap().level.as_deref(), Some("WARNING"));
-
-        // Check other plugins are None
-        assert!(activated.slurm.is_none());
-        assert!(activated.rabbitmqapi.is_none());
-        assert!(activated.smtp.is_none());
-        assert!(activated.jmx.is_none());
-    }
-
-    #[test]
-    fn test_activate_merges_storage() {
-        let config_str = r#"
-version: 1
-
-storage-a:
-  plugin: storage
-  key.a: value-a
-  key.shared: from-a
-
-storage-b:
-  plugin: storage
-  key.b: value-b
-  key.shared: from-b
-
-environments:
-  test:
-    plugins:
-    - storage-a
-    - storage-b
-"#;
-        let mut config = ConfigurationManager::from_string(config_str).unwrap();
-        config.activate(vec!["test".to_string()]).unwrap();
-        let activated = config.resolve().unwrap();
-
-        // Both storage keys should be present
-        assert!(activated.storage.contains_key("key.a"));
-        assert!(activated.storage.contains_key("key.b"));
-
-        // Shared key should have value from last plugin (storage-b)
-        assert_eq!(
-            activated.storage.get("key.shared"),
-            Some(&serde_yaml::Value::String("from-b".to_string()))
-        );
     }
 }
