@@ -1,13 +1,22 @@
-//! Support infrastructure for interacting with [Zocalo](https://github.com/diamondlightsource/python-zocalo) from Rust.
+//! Support infrastructure for interacting with
+//! [Zocalo](https://github.com/diamondlightsource/python-zocalo) from Rust.
 //!
 //! Currently supports:
-//! - Loading configuration files and extracting data values from them, via [Configuration].
+//! - Loading configuration files and extracting data values from them, via
+//!   loading a [`Configuration`], or constructing directly with environment
+//!   defaults via [`configuration::ExtractConfig`] e.g.
+//!
+//!   ```no_run
+//!   use crate::zocalo::ExtractConfig;
+//!   let rmq = zocalo::RabbitMQConfig::from_default_env().unwrap().unwrap();
+//!   println!("RabbitMQ hosts: {}", rmq.host.join(", "));
+//!   ```
 
 pub mod configuration;
 
-pub use configuration::plugins;
 pub use configuration::{
     ConfigError, Configuration, GraylogConfig, JmxConfig, LoggingConfig, RabbitMQApiConfig,
     RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig, ZOCALO_CONFIG_ENV,
     ZOCALO_DEFAULT_ENV,
 };
+pub use configuration::{ExtractConfig, plugins};

@@ -37,7 +37,9 @@ pub struct LoggingConfig {
 impl ExtractConfig for LoggingConfig {
     type Config = Self;
 
-    fn extract_from(configuration: &Configuration) -> Result<Option<Self::Config>, ConfigError> {
+    fn from_configuration(
+        configuration: &Configuration,
+    ) -> Result<Option<Self::Config>, ConfigError> {
         match configuration.get_plugins_of_kind("logging").last() {
             None => Ok(None),
             Some(&plugin) => {

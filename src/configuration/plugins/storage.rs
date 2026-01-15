@@ -12,7 +12,9 @@ pub struct StorageConfig {
 impl ExtractConfig for StorageConfig {
     type Config = Self;
 
-    fn extract_from(configuration: &Configuration) -> Result<Option<Self::Config>, ConfigError> {
+    fn from_configuration(
+        configuration: &Configuration,
+    ) -> Result<Option<Self::Config>, ConfigError> {
         let plugins = configuration.get_plugins_of_kind("storage");
         if plugins.is_empty() {
             return Ok(None);

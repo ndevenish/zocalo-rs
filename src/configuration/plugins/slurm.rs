@@ -13,7 +13,9 @@ pub struct SlurmConfig {
 impl ExtractConfig for SlurmConfig {
     type Config = Self;
 
-    fn extract_from(configuration: &Configuration) -> Result<Option<Self::Config>, ConfigError> {
+    fn from_configuration(
+        configuration: &Configuration,
+    ) -> Result<Option<Self::Config>, ConfigError> {
         match configuration.get_plugins_of_kind("slurm").last() {
             None => Ok(None),
             Some(&plugin) => {

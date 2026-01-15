@@ -43,12 +43,14 @@ pub enum ConfigError {
 pub trait ExtractConfig {
     type Config;
 
-    fn extract_from(configuration: &Configuration) -> Result<Option<Self::Config>, ConfigError>;
+    fn from_configuration(
+        configuration: &Configuration,
+    ) -> Result<Option<Self::Config>, ConfigError>;
 
     fn from_default_env() -> Result<Option<Self::Config>, ConfigError> {
         let mut conf = Configuration::from_env()?;
         conf.activate(None)?;
-        Self::extract_from(&conf)
+        Self::from_configuration(&conf)
     }
 }
 
@@ -460,7 +462,7 @@ environments:
         let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
         config.activate(vec!["live".to_string()]).unwrap();
 
-        let graylog = plugins::GraylogConfig::extract_from(&config)
+        let graylog = plugins::GraylogConfig::from_configuration(&config)
             .unwrap()
             .expect("Expected Graylog plugin");
 
@@ -474,7 +476,7 @@ environments:
         let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
         config.activate(vec!["live".to_string()]).unwrap();
 
-        let storage = plugins::StorageConfig::extract_from(&config)
+        let storage = plugins::StorageConfig::from_configuration(&config)
             .unwrap()
             .expect("Expected Storage plugin");
 
@@ -505,7 +507,7 @@ environments:
         config.activate(vec!["live".to_string()]).unwrap();
 
         // Check graylog plugin
-        let graylog = plugins::GraylogConfig::extract_from(&config)
+        let graylog = plugins::GraylogConfig::from_configuration(&config)
             .unwrap()
             .expect("Expected graylog plugin");
         assert_eq!(graylog.host, "graylog.example.com");
@@ -513,13 +515,13 @@ environments:
         assert_eq!(graylog.protocol, plugins::GraylogProtocol::Udp);
 
         // Check transport plugin
-        let transport = plugins::TransportConfig::extract_from(&config)
+        let transport = plugins::TransportConfig::from_configuration(&config)
             .unwrap()
             .expect("Expected transport plugin");
         assert_eq!(transport.default, "PikaTransport");
 
         // Check storage plugin
-        let storage = plugins::StorageConfig::extract_from(&config)
+        let storage = plugins::StorageConfig::from_configuration(&config)
             .unwrap()
             .expect("Expected storage plugin");
         assert!(storage.values.contains_key("zocalo.recipe_directory"));
@@ -554,7 +556,7 @@ environments:
         let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
         config.activate(vec!["live".to_string()]).unwrap();
 
-        let logging = plugins::LoggingConfig::extract_from(&config)
+        let logging = plugins::LoggingConfig::from_configuration(&config)
             .unwrap()
             .expect("Expected logging plugin");
 
@@ -595,7 +597,7 @@ environments:
         let mut config = Configuration::from_string(config_str).unwrap();
         config.activate(vec!["test".to_string()]).unwrap();
 
-        let storage = plugins::StorageConfig::extract_from(&config)
+        let storage = plugins::StorageConfig::from_configuration(&config)
             .unwrap()
             .expect("Expected storage plugin");
 
