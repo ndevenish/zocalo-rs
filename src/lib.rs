@@ -7,7 +7,7 @@ pub mod configuration;
 
 pub use configuration::plugins;
 pub use configuration::{
-    ConfigError, Configuration, Environment, GraylogConfig, JmxConfig, LoggingConfig, PluginConfig,
+    ConfigError, Configuration, Environment, GraylogConfig, JmxConfig, LoggingConfig,
     PluginDefinition, RabbitMQApiConfig, RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig,
     ZOCALO_CONFIG_ENV, ZOCALO_DEFAULT_ENV,
 };

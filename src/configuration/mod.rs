@@ -3,6 +3,7 @@ pub mod format_spec;
 pub mod plugins;
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,9 +13,11 @@ use thiserror::Error;
 
 pub use environment::Environment;
 pub use plugins::{
-    GraylogConfig, JmxConfig, LoggingConfig, PluginConfig, PluginDefinition, RabbitMQApiConfig,
-    RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig, UnknownConfig,
+    GraylogConfig, JmxConfig, LoggingConfig, PluginDefinition, RabbitMQApiConfig, RabbitMQConfig,
+    SlurmConfig, SmtpConfig, TransportConfig, UnknownConfig,
 };
+
+use crate::plugins::UnparsedConfig;
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -34,6 +37,19 @@ pub enum ConfigError {
     UndefinedPlugin(String),
     #[error("Failed to resolve plugin '{0}': {1}")]
     PluginResolutionError(String, String),
+}
+
+/// Extract a plugin config from a configuration
+pub trait ExtractConfig {
+    type Config;
+
+    fn extract_from(configuration: &Configuration) -> Result<Option<Self::Config>, ConfigError>;
+
+    fn from_default_env() -> Result<Option<Self::Config>, ConfigError> {
+        let mut conf = Configuration::from_env()?;
+        conf.activate(None)?;
+        Self::extract_from(&conf)
+    }
 }
 
 #[derive(Debug)]
@@ -71,6 +87,12 @@ impl Configuration {
             Ok(path) => Self::from_file(path),
             Err(_) => Ok(Self::empty()),
         }
+    }
+
+    pub fn activated_default_env() -> Result<Self, ConfigError> {
+        let mut c = Self::from_env()?;
+        c.activate(None)?;
+        Ok(c)
     }
 
     /// Create an empty configuration with no environments or plugins.
@@ -183,50 +205,39 @@ impl Configuration {
         &self.activated
     }
 
-    pub fn plugin_definitions(&self) -> impl Iterator<Item = (&str, &PluginDefinition)> {
-        self.plugin_definitions.iter().map(|(k, v)| (k.as_str(), v))
-    }
-
-    pub fn get_plugin(&self, name: &str) -> Option<&PluginDefinition> {
-        self.plugin_definitions.get(name)
-    }
-
-    pub fn resolve_plugin(&mut self, name: &str) -> Result<&PluginConfig, ConfigError> {
-        if !self.plugin_definitions.contains_key(name) {
-            return Err(ConfigError::UndefinedPlugin(name.to_string()));
+    fn resolve_plugin<'a, 'b>(
+        &'b mut self,
+        name: &'a str,
+    ) -> Result<&'b UnparsedConfig, ConfigError> {
+        match self.plugin_definitions.entry(name.to_string()) {
+            Entry::Vacant(_) => {
+                return Err(ConfigError::UndefinedPlugin(name.to_string()));
+            }
+            Entry::Occupied(mut entry) => {
+                if let PluginDefinition::Unresolved(path) = entry.get() {
+                    let path = path.clone();
+                    let content = fs::read_to_string(&path).map_err(|e| {
+                        ConfigError::PluginResolutionError(
+                            name.to_string(),
+                            format!("{:?}: {e}", &path),
+                        )
+                    })?;
+                    let config: UnparsedConfig = serde_yaml::from_str(&content).map_err(|e| {
+                        ConfigError::PluginResolutionError(name.to_string(), e.to_string())
+                    })?;
+                    entry.insert(PluginDefinition::Resolved(config));
+                }
+            }
         }
 
-        // Check if already resolved
-        if let Some(PluginDefinition::Resolved(config)) = self.plugin_definitions.get(name) {
-            return Ok(unsafe {
-                // SAFETY: We're returning a reference that will live as long as self
-                &*(config as *const PluginConfig)
-            });
-        }
-
-        // Need to resolve from file
-        let path = match self.plugin_definitions.get(name) {
-            Some(PluginDefinition::Unresolved(path)) => path.clone(),
-            _ => unreachable!(),
-        };
-
-        let content = fs::read_to_string(&path).map_err(|e| {
-            ConfigError::PluginResolutionError(name.to_string(), format!("{:?}: {e}", &path))
-        })?;
-
-        let plugin_config: PluginConfig = serde_yaml::from_str(&content)
-            .map_err(|e| ConfigError::PluginResolutionError(name.to_string(), e.to_string()))?;
-
-        self.plugin_definitions
-            .insert(name.to_string(), PluginDefinition::Resolved(plugin_config));
-
+        // We definitely have this entry now
         match self.plugin_definitions.get(name) {
             Some(PluginDefinition::Resolved(config)) => Ok(config),
             _ => unreachable!(),
         }
     }
 
-    pub fn activate_environment(&mut self, name: &str) -> Result<(), ConfigError> {
+    fn activate_environment(&mut self, name: &str) -> Result<(), ConfigError> {
         if !self.environments.contains_key(name) {
             return Err(ConfigError::UndefinedEnvironment(name.to_string()));
         }
@@ -240,6 +251,30 @@ impl Configuration {
 
         self.activated.push(name.to_string());
         Ok(())
+    }
+
+    /// Get all plugins with a given `plugin: <named>`
+    pub fn get_plugins_of_kind(&self, named: &str) -> Vec<&UnparsedConfig> {
+        let all_names: Vec<_> = self
+            .activated_environments()
+            .iter()
+            .flat_map(|env_name| {
+                self.environments
+                    .get(env_name)
+                    .unwrap()
+                    .all_plugins()
+                    .map(|s| s.to_string())
+            })
+            .collect();
+
+        all_names
+            .iter()
+            .map(|n| self.plugin_definitions.get(n).unwrap().as_config().unwrap())
+            .filter(|&u| u.plugin == named)
+            .collect()
+    }
+    pub fn plugin_definitions(&self) -> impl Iterator<Item = (&str, &PluginDefinition)> {
+        self.plugin_definitions.iter().map(|(k, v)| (k.as_str(), v))
     }
 
     /// Activate environments.
@@ -289,7 +324,7 @@ struct RawConfiguration {
 #[derive(Debug)]
 enum RawPluginDefinition {
     Path(String),
-    Inline(PluginConfig),
+    Inline(UnparsedConfig),
 }
 
 impl<'de> Deserialize<'de> for RawPluginDefinition {
@@ -324,7 +359,8 @@ impl<'de> Deserialize<'de> for RawPluginDefinition {
             where
                 M: MapAccess<'de>,
             {
-                let config = PluginConfig::deserialize(de::value::MapAccessDeserializer::new(map))?;
+                let config =
+                    UnparsedConfig::deserialize(de::value::MapAccessDeserializer::new(map))?;
                 Ok(RawPluginDefinition::Inline(config))
             }
         }
@@ -531,5 +567,41 @@ environments:
         } else {
             panic!("Expected logging-production plugin");
         }
+    }
+
+    #[test]
+    fn test_activate_merges_storage() {
+        let config_str = r#"
+version: 1
+
+storage-a:
+  plugin: storage
+  key.a: value-a
+  key.shared: from-a
+
+storage-b:
+  plugin: storage
+  key.b: value-b
+  key.shared: from-b
+
+environments:
+  test:
+    plugins:
+    - storage-a
+    - storage-b
+"#;
+        let mut config = Configuration::from_string(config_str).unwrap();
+        config.activate(vec!["test".to_string()]).unwrap();
+        let activated = config.resolve().unwrap();
+
+        // Both storage keys should be present
+        assert!(activated.storage.contains_key("key.a"));
+        assert!(activated.storage.contains_key("key.b"));
+
+        // Shared key should have value from last plugin (storage-b)
+        assert_eq!(
+            activated.storage.get("key.shared"),
+            Some(&serde_yaml::Value::String("from-b".to_string()))
+        );
     }
 }

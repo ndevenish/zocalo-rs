@@ -71,22 +71,6 @@ impl Environment {
             .map(|s| s.as_str())
             .chain(plugins_group)
     }
-
-    pub fn logging_plugins(&self) -> Option<&[String]> {
-        self.groups.get("logging").map(|v| v.as_slice())
-    }
-
-    pub fn activemq_plugins(&self) -> Option<&[String]> {
-        self.groups.get("activemq").map(|v| v.as_slice())
-    }
-
-    pub fn rabbitmq_plugins(&self) -> Option<&[String]> {
-        self.groups.get("rabbitmq").map(|v| v.as_slice())
-    }
-
-    pub fn rabbitmqapi_plugins(&self) -> Option<&[String]> {
-        self.groups.get("rabbitmqapi").map(|v| v.as_slice())
-    }
 }
 
 #[derive(Debug, Deserialize)]

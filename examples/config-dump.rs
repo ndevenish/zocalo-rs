@@ -2,7 +2,10 @@ use std::process;
 
 use clap::Parser;
 use colored::Colorize;
-use zocalo::{Configuration, PluginConfig, PluginDefinition};
+use zocalo::{
+    Configuration, GraylogConfig, JmxConfig, LoggingConfig, PluginDefinition, RabbitMQApiConfig,
+    RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig,
+};
 
 /// Dump a Zocalo configuration file
 #[derive(Parser)]
@@ -75,43 +78,63 @@ fn main() {
                 );
             }
             PluginDefinition::Resolved(plugin) => {
-                let (type_name, details) = match plugin {
-                    PluginConfig::Graylog(g) => (
-                        "graylog",
+                let details = match plugin.plugin.as_str() {
+                    "pika" => {
+                        let r: RabbitMQConfig =
+                            serde_yaml::from_value(plugin.values.clone()).unwrap();
+                        let port = r.port.map(|p| p.to_string()).unwrap_or_default();
+                        format!("{}:{}", r.host.join(","), port)
+                    }
+                    "transport" => format!(
+                        "default: {}",
+                        serde_yaml::from_value::<TransportConfig>(plugin.values.clone())
+                            .unwrap()
+                            .default
+                    ),
+                    "graylog" => {
+                        let g: GraylogConfig =
+                            serde_yaml::from_value(plugin.values.clone()).unwrap();
                         format!(
                             "{}://{}:{}",
                             format!("{:?}", g.protocol).to_lowercase(),
                             g.host,
                             g.port
-                        ),
-                    ),
-                    PluginConfig::Logging(l) => (
-                        "logging",
+                        )
+                    }
+                    "slurm" => serde_yaml::from_value::<SlurmConfig>(plugin.values.clone())
+                        .unwrap()
+                        .url
+                        .clone(),
+                    "rabbitmqapi" => {
+                        serde_yaml::from_value::<RabbitMQApiConfig>(plugin.values.clone())
+                            .unwrap()
+                            .base_url
+                            .join(",")
+                    }
+                    "smtp" => {
+                        let s: SmtpConfig = serde_yaml::from_value(plugin.values.clone()).unwrap();
+                        format!("{}:{}", s.host, s.port)
+                    }
+                    "jmx" => {
+                        let j: JmxConfig = serde_yaml::from_value(plugin.values.clone()).unwrap();
+                        format!("{}:{}", j.host, j.port)
+                    }
+                    "logging" => {
+                        let l: LoggingConfig =
+                            serde_yaml::from_value(plugin.values.clone()).unwrap();
                         format!(
                             "{} loggers, {} verbose levels",
                             l.loggers.len(),
                             l.verbose.len()
-                        ),
-                    ),
-                    PluginConfig::Storage(s) => ("storage", format!("{} keys", s.values.len())),
-                    PluginConfig::Transport(t) => ("transport", format!("default: {}", t.default)),
-                    PluginConfig::Slurm(s) => ("slurm", s.url.clone()),
-                    PluginConfig::RabbitMQ(r) => {
-                        let port = r.port.map(|p| p.to_string()).unwrap_or_default();
-                        ("rabbitmq", format!("{}:{}", r.host.join(","), port))
+                        )
                     }
-                    PluginConfig::RabbitMQApi(r) => ("rabbitmqapi", r.base_url.join(",")),
-                    PluginConfig::Smtp(s) => ("smtp", format!("{}:{}", s.host, s.port)),
-                    PluginConfig::Jmx(j) => ("jmx", format!("{}:{}", j.host, j.port)),
-                    PluginConfig::Unknown(u) => {
-                        (u.plugin.as_str(), format!("{} values", u.values.len()))
-                    }
+                    _ => format!("{} keys", plugin.values.as_mapping().unwrap().len()),
                 };
                 println!(
                     "  {} {} {} {}",
                     name.yellow(),
                     "->".dimmed(),
-                    type_name.cyan(),
+                    plugin.plugin.cyan(),
                     format!("({})", details).dimmed()
                 );
             }
