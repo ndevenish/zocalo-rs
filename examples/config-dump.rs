@@ -3,8 +3,8 @@ use std::process;
 use clap::Parser;
 use colored::Colorize;
 use zocalo::{
-    Configuration, GraylogConfig, JmxConfig, LoggingConfig, PluginDefinition, RabbitMQApiConfig,
-    RabbitMQConfig, SlurmConfig, SmtpConfig, TransportConfig,
+    Configuration, GraylogConfig, JmxConfig, LoggingConfig, RabbitMQApiConfig, RabbitMQConfig,
+    SlurmConfig, SmtpConfig, TransportConfig, plugins::PluginDefinition,
 };
 
 /// Dump a Zocalo configuration file
