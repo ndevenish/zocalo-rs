@@ -27,7 +27,7 @@ impl ExtractConfig for RabbitMQConfig {
         match configuration.get_plugins_of_kind("pika").last() {
             None => Ok(None),
             Some(&plugin) => {
-                serde_yaml::from_value(plugin.values.clone()).map_err(|e| ConfigError::YamlError(e))
+                serde_yaml::from_value(plugin.values.clone()).map_err(ConfigError::YamlError)
             }
         }
     }

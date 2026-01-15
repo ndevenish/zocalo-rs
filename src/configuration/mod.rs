@@ -205,10 +205,7 @@ impl Configuration {
         &self.activated
     }
 
-    fn resolve_plugin<'a, 'b>(
-        &'b mut self,
-        name: &'a str,
-    ) -> Result<&'b UnparsedConfig, ConfigError> {
+    fn resolve_plugin<'b>(&'b mut self, name: &str) -> Result<&'b UnparsedConfig, ConfigError> {
         match self.plugin_definitions.entry(name.to_string()) {
             Entry::Vacant(_) => {
                 return Err(ConfigError::UndefinedPlugin(name.to_string()));
@@ -442,38 +439,46 @@ environments:
         let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         // Check inline plugin
-        let graylog = config.get_plugin("graylog-basic").unwrap();
-        assert!(graylog.is_resolved());
+        let graylog = config
+            .plugin_definitions()
+            .find(|(n, _)| *n == "graylog-basic")
+            .map(|(_, d)| d);
+        assert!(graylog.is_some());
+        assert!(graylog.unwrap().is_resolved());
 
         // Check external file reference
-        let external = config.get_plugin("external-config").unwrap();
-        assert!(!external.is_resolved());
+        let external = config
+            .plugin_definitions()
+            .find(|(n, _)| *n == "external-config")
+            .map(|(_, d)| d);
+        assert!(external.is_some());
+        assert!(!external.unwrap().is_resolved());
     }
 
     #[test]
     fn test_graylog_plugin() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
-        if let Some(PluginDefinition::Resolved(PluginConfig::Graylog(graylog))) =
-            config.get_plugin("graylog-basic")
-        {
-            assert_eq!(graylog.host, "graylog.example.com");
-            assert_eq!(graylog.port, 12201);
-            assert_eq!(graylog.protocol, plugins::GraylogProtocol::Udp);
-        } else {
-            panic!("Expected Graylog plugin");
-        }
+        let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        config.activate(vec!["live".to_string()]).unwrap();
+
+        let graylog = plugins::GraylogConfig::extract_from(&config)
+            .unwrap()
+            .expect("Expected Graylog plugin");
+
+        assert_eq!(graylog.host, "graylog.example.com");
+        assert_eq!(graylog.port, 12201);
+        assert_eq!(graylog.protocol, plugins::GraylogProtocol::Udp);
     }
 
     #[test]
     fn test_storage_plugin() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
-        if let Some(PluginDefinition::Resolved(PluginConfig::Storage(storage))) =
-            config.get_plugin("storage-config")
-        {
-            assert!(storage.values.contains_key("zocalo.recipe_directory"));
-        } else {
-            panic!("Expected Storage plugin");
-        }
+        let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        config.activate(vec!["live".to_string()]).unwrap();
+
+        let storage = plugins::StorageConfig::extract_from(&config)
+            .unwrap()
+            .expect("Expected Storage plugin");
+
+        assert!(storage.values.contains_key("zocalo.recipe_directory"));
     }
 
     #[test]
@@ -485,7 +490,7 @@ environments:
 
     #[test]
     fn test_parse_sample_config() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
 
         // Check version
         assert_eq!(config.version(), 1);
@@ -496,37 +501,35 @@ environments:
         assert!(envs.contains(&"dev"));
         assert!(envs.contains(&"default"));
 
-        // Check graylog-basic plugin
-        if let Some(PluginDefinition::Resolved(PluginConfig::Graylog(graylog))) =
-            config.get_plugin("graylog-basic")
-        {
-            assert_eq!(graylog.host, "graylog.example.com");
-            assert_eq!(graylog.port, 12201);
-            assert_eq!(graylog.protocol, plugins::GraylogProtocol::Udp);
-        } else {
-            panic!("Expected graylog-basic plugin");
-        }
+        // Activate live environment for typed plugin access
+        config.activate(vec!["live".to_string()]).unwrap();
+
+        // Check graylog plugin
+        let graylog = plugins::GraylogConfig::extract_from(&config)
+            .unwrap()
+            .expect("Expected graylog plugin");
+        assert_eq!(graylog.host, "graylog.example.com");
+        assert_eq!(graylog.port, 12201);
+        assert_eq!(graylog.protocol, plugins::GraylogProtocol::Udp);
 
         // Check transport plugin
-        if let Some(PluginDefinition::Resolved(PluginConfig::Transport(transport))) =
-            config.get_plugin("transport-config")
-        {
-            assert_eq!(transport.default, "PikaTransport");
-        } else {
-            panic!("Expected transport-config plugin");
-        }
+        let transport = plugins::TransportConfig::extract_from(&config)
+            .unwrap()
+            .expect("Expected transport plugin");
+        assert_eq!(transport.default, "PikaTransport");
 
         // Check storage plugin
-        if let Some(PluginDefinition::Resolved(PluginConfig::Storage(storage))) =
-            config.get_plugin("storage-config")
-        {
-            assert!(storage.values.contains_key("zocalo.recipe_directory"));
-        } else {
-            panic!("Expected storage-config plugin");
-        }
+        let storage = plugins::StorageConfig::extract_from(&config)
+            .unwrap()
+            .expect("Expected storage plugin");
+        assert!(storage.values.contains_key("zocalo.recipe_directory"));
 
         // Check external file references
-        let external = config.get_plugin("external-config").unwrap();
+        let external = config
+            .plugin_definitions()
+            .find(|(n, _)| *n == "external-config")
+            .map(|(_, d)| d)
+            .expect("Expected external-config");
         assert!(!external.is_resolved());
         assert!(
             external
@@ -538,7 +541,7 @@ environments:
 
         // Check live environment structure
         let live_env = config.get_environment("live").unwrap();
-        assert!(live_env.logging_plugins().is_some());
+        assert!(live_env.get_group("logging").is_some());
         assert!(live_env.get_group("plugins").is_some());
 
         // Check environment alias
@@ -548,25 +551,24 @@ environments:
 
     #[test]
     fn test_logging_plugin() {
-        let config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        let mut config = Configuration::from_string(SAMPLE_CONFIG).unwrap();
+        config.activate(vec!["live".to_string()]).unwrap();
 
-        if let Some(PluginDefinition::Resolved(PluginConfig::Logging(logging))) =
-            config.get_plugin("logging-production")
-        {
-            // Check root logger
-            assert!(logging.root.is_some());
-            let root = logging.root.as_ref().unwrap();
-            assert_eq!(root.level.as_deref(), Some("WARNING"));
+        let logging = plugins::LoggingConfig::extract_from(&config)
+            .unwrap()
+            .expect("Expected logging plugin");
 
-            // Check loggers
-            assert!(logging.loggers.contains_key("dials"));
-            assert!(logging.loggers.contains_key("zocalo"));
+        // Check root logger
+        assert!(logging.root.is_some());
+        let root = logging.root.as_ref().unwrap();
+        assert_eq!(root.level.as_deref(), Some("WARNING"));
 
-            // Check verbose levels
-            assert!(!logging.verbose.is_empty());
-        } else {
-            panic!("Expected logging-production plugin");
-        }
+        // Check loggers
+        assert!(logging.loggers.contains_key("dials"));
+        assert!(logging.loggers.contains_key("zocalo"));
+
+        // Check verbose levels
+        assert!(!logging.verbose.is_empty());
     }
 
     #[test]
@@ -592,15 +594,18 @@ environments:
 "#;
         let mut config = Configuration::from_string(config_str).unwrap();
         config.activate(vec!["test".to_string()]).unwrap();
-        let activated = config.resolve().unwrap();
+
+        let storage = plugins::StorageConfig::extract_from(&config)
+            .unwrap()
+            .expect("Expected storage plugin");
 
         // Both storage keys should be present
-        assert!(activated.storage.contains_key("key.a"));
-        assert!(activated.storage.contains_key("key.b"));
+        assert!(storage.values.contains_key("key.a"));
+        assert!(storage.values.contains_key("key.b"));
 
         // Shared key should have value from last plugin (storage-b)
         assert_eq!(
-            activated.storage.get("key.shared"),
+            storage.values.get("key.shared"),
             Some(&serde_yaml::Value::String("from-b".to_string()))
         );
     }

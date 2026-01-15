@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::{ConfigError, Configuration, configuration::ExtractConfig};
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoggerConfig {
     pub level: Option<String>,
@@ -30,4 +32,17 @@ pub struct LoggingConfig {
     pub loggers: HashMap<String, LoggerConfig>,
     #[serde(default)]
     pub verbose: Vec<VerbosityLevel>,
+}
+
+impl ExtractConfig for LoggingConfig {
+    type Config = Self;
+
+    fn extract_from(configuration: &Configuration) -> Result<Option<Self::Config>, ConfigError> {
+        match configuration.get_plugins_of_kind("logging").last() {
+            None => Ok(None),
+            Some(&plugin) => {
+                serde_yaml::from_value(plugin.values.clone()).map_err(ConfigError::YamlError)
+            }
+        }
+    }
 }

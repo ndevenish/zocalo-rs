@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde_with::{StringWithSeparator, formats::CommaSeparator, serde_as};
 
+use crate::{ConfigError, Configuration, configuration::ExtractConfig};
+
 #[serde_as]
 #[derive(Debug, Clone, Deserialize)]
 pub struct RabbitMQApiConfig {
@@ -14,4 +16,17 @@ pub struct RabbitMQApiConfig {
 
 fn default_vhost() -> String {
     "/".to_string()
+}
+
+impl ExtractConfig for RabbitMQApiConfig {
+    type Config = Self;
+
+    fn extract_from(configuration: &Configuration) -> Result<Option<Self::Config>, ConfigError> {
+        match configuration.get_plugins_of_kind("rabbitmqapi").last() {
+            None => Ok(None),
+            Some(&plugin) => {
+                serde_yaml::from_value(plugin.values.clone()).map_err(ConfigError::YamlError)
+            }
+        }
+    }
 }
