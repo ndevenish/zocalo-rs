@@ -2,6 +2,12 @@
 name = "zocalo"
 version = "0.1.0"
 edition = "2024"
+license = "BSD-3-Clause"
+repository = "https://github.com/ndevenish/zocalo-rs"
+description = "Tools for interfacing with python-Zocalo distributed systems"
+include = [
+    "**/*.rs"
+]
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
