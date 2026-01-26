@@ -195,8 +195,10 @@ impl Serialize for NodeOutput {
 /// other data that the service instance will use to process the node.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Node {
-    /// The message broken queue that this recipe will be posted to
+    /// The message broker queue (or, routing key) that this recipe will be posted to
     pub queue: String,
+    /// The AMQP exchange to post this recipe to
+    pub exchange: Option<String>,
     /// The "Name" of the service that is responsible for this node
     pub service: Option<String>,
     /// Onward nodes, that messages from this node can be sent
