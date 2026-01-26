@@ -18,6 +18,7 @@
 //! for the list of built-in configurations available.
 
 pub mod configuration;
+pub mod workflows;
 
 pub use configuration::{
     ConfigError, Configuration, GraylogConfig, JmxConfig, LoggingConfig, RabbitMQApiConfig,
