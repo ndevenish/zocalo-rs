@@ -37,6 +37,8 @@ pub enum ConfigError {
     UndefinedPlugin(String),
     #[error("Failed to resolve plugin '{0}': {1}")]
     PluginResolutionError(String, String),
+    #[error("Could not find zocalo config; is ZOCALO_CONFIG set?")]
+    NoConfig,
 }
 
 /// Extract a plugin config from a configuration
@@ -83,11 +85,11 @@ pub const ZOCALO_DEFAULT_ENV: &str = "ZOCALO_DEFAULT_ENV";
 impl Configuration {
     /// Load configuration from the `ZOCALO_CONFIG` environment variable.
     ///
-    /// Returns an empty configuration if the variable is not set.
+    /// Returns an error if there is no environment available
     pub fn from_env() -> Result<Self, ConfigError> {
         match std::env::var(ZOCALO_CONFIG_ENV) {
             Ok(path) => Self::from_file(path),
-            Err(_) => Ok(Self::empty()),
+            Err(_) => Err(ConfigError::NoConfig),
         }
     }
 
